@@ -1,0 +1,91 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class SpearSkill1 : MonoBehaviour
+{
+    private Transform thisparent;
+
+    private Vector3 mouse_pos;
+    private Vector3 this_position;
+
+    public GameObject effect;
+
+    // 스킬 데미지 계수
+    public float multiple = 1;
+
+    private float physical_attack;
+
+    private Vector3 dir;
+
+    private float dx;
+    private float dy;
+
+    private float speed = 20f;
+
+    private float rotate_degree;
+
+
+    private GameObject character;
+    // Start is called before the first frame update
+    void Start()
+    {
+        mouse_pos = SkillManager.instance.mouse_pos;
+        physical_attack = this.gameObject.GetComponentInParent<CharacterStat>().PhysicalAttackPower;
+        thisparent = this.gameObject.transform.parent;
+       
+        character = this.transform.parent.gameObject;
+        this.transform.parent = this.transform.parent.parent;
+
+        mouse_pos.z = this.transform.position.z;
+        this_position = this.transform.position;
+
+        dx = mouse_pos.x - this_position.x;
+        dy = mouse_pos.y - this_position.y;
+
+        dir = (mouse_pos - this.transform.position).normalized;
+
+        rotate_degree = Mathf.Atan2(dy, dx) * Mathf.Rad2Deg;
+
+     
+
+        if(mouse_pos.x - this.transform.position.x > 0)
+        {
+            Debug.Log("x > 0");
+            transform.rotation = Quaternion.Euler(0f, 0f, -90 + rotate_degree);
+        }
+        else
+        {
+            transform.rotation = Quaternion.Euler(0f, 0f, 270 + rotate_degree);
+        }
+
+
+        Destroy(this.gameObject, 0.5f);
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        this.transform.Translate( dir * speed * Time.deltaTime, Space.World);
+        speed -= 0.5f;
+    }
+
+
+    private void OnTriggerEnter2D(Collider2D collision)
+    {
+        if (collision.CompareTag("Boss"))
+        {
+            Vector3 position = this.transform.position;
+            Instantiate(effect, position, Quaternion.identity);
+            BossStatus.instance.BossGetSkillDamage(physical_attack * multiple, false);
+            BossStatus.instance.GetBuff(6, thisparent.gameObject);
+            if(character.GetComponentInChildren<Spear_Skill3_1>() != null)
+            {
+                character.GetComponent<CharacterStat>().GetHeal(physical_attack * multiple * character.GetComponentInChildren<Spear_Skill3_1>().percent);
+            }
+            BossStatus.instance.GetBuff(6);
+            Destroy(this.gameObject);
+
+        }
+    }
+}

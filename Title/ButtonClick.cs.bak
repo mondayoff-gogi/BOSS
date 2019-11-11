@@ -1,0 +1,67 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using System;
+using UnityEngine.UI;
+
+public class ButtonClick : MonoBehaviour
+{
+    private Button button;
+    private int boss_index = 0;
+    private int character_index = 0;
+    private int item_index = 0;
+    private int tab_index = 0;
+    private int Equip_index = 0;
+    TitleButton title_Button;
+    Inventory inventory;
+    Equipment Equip;
+
+    public GameObject main_camera;
+    public GameObject inven;
+    // Start is called before the first frame update
+    void Start()
+    {
+        button = this.gameObject.GetComponent<Button>();
+        title_Button = main_camera.GetComponent<TitleButton>();
+        inventory = inven.GetComponent<Inventory>();
+        Equip = inven.GetComponent<Equipment>();
+    }
+
+    public void BossButtonClick()
+    {
+        boss_index = Convert.ToInt32(button.name);
+        title_Button.GetBossIndex(boss_index);
+    }
+
+    public void CharacterButtonClick()
+    {
+        character_index = Convert.ToInt32(button.name);
+        title_Button.GetCharaterIndex(character_index);
+    }
+
+    public void CharacterIndex()
+    {
+        character_index = Convert.ToInt32(button.name);
+        inventory.GetCharacterIndex(character_index);
+        Equip.GetCharacterIndex(character_index);
+    }
+
+    public void ItemIndex()
+    {
+        item_index = Convert.ToInt32(button.name);
+        inventory.GetItemIndex(item_index);
+    }
+
+    public void TabIndex()
+    {
+        tab_index = Convert.ToInt32(button.name);
+        inventory.GetTabIndex(tab_index);
+    }
+
+    public void EquipIndex()
+    {
+        Equip_index = Convert.ToInt32(button.name);
+        inventory.GetEquipIndex(Equip_index);
+    }
+
+}

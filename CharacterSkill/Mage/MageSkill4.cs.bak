@@ -1,0 +1,58 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class MageSkill4 : MonoBehaviour
+{
+    private float magic_attack;
+    private const float multiple = 3.3f;
+    private GameObject player;
+    private CircleCollider2D _col;
+
+    private void Start()
+    {
+        Destroy(this.gameObject, 1f);
+        magic_attack = GameManage.instance.player[0].GetComponent<CharacterStat>().MagicAttackPower;
+        _col = this.GetComponent<CircleCollider2D>();
+        Invoke("DeActivateCol", 0.1f);
+        SoundManager.instance.Play(32);
+    }
+
+    private void OnTriggerEnter2D(Collider2D collision)
+    {
+        Debug.Log(this.transform.position.z);
+        if (this.transform.position.z>-774)
+        {
+            if (collision.CompareTag("Boss"))
+            {
+                // 마법 공격력 * 타이머 * 3
+                Debug.Log(player.name);
+                if (Random.Range(1.0f, 100.0f) <= GameManage.instance.player[0].GetComponent<CharacterStat>().ciritical)
+                {
+                    collision.GetComponent<BossStatus>().BossGetSkillCriticalDamage((magic_attack * multiple), true, player.gameObject);
+                }
+                else
+                {
+                    collision.GetComponent<BossStatus>().BossGetSkillDamage((magic_attack * multiple), true, player.gameObject);
+                }
+
+
+            }
+            if (collision.CompareTag("Monster"))
+            {
+                if (Random.Range(1.0f, 100.0f) <= GameManage.instance.player[0].GetComponent<CharacterStat>().ciritical)
+                {
+                    collision.GetComponent<Monster>().GetCritialDamage((magic_attack * multiple));
+                }
+                else
+                {
+                    collision.GetComponent<Monster>().GetDamage(magic_attack * multiple);
+                }
+            }
+        }
+    }
+    public void DeActivateCol()
+    {
+        _col.enabled = false;
+    }
+}

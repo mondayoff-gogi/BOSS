@@ -1,0 +1,322 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+
+public class Character_Control : MonoBehaviour
+{
+    public GameObject Select_player_arrow_prefab;
+    public GameObject[] skillBackground;
+    public Button[] skillButton;
+    [HideInInspector]
+    public Vector3 target_pos; //마우스 땠을때 마지막 위치    
+    [HideInInspector]
+    public float move_speed = 1.0f; //움직이는 속도  다른곳에서 속도를 바꾸어줄수있도록 public
+    [HideInInspector]
+    public bool is_character_click;
+    public GameObject clickpanel;
+
+    private GameObject temp; //화살표 프리팹
+    private GameObject _player;
+    private GameObject target_object;
+
+    private Rigidbody2D _rigidbody;
+
+    private Animator _animator;
+
+    private Vector2 pos;
+    private RaycastHit2D hit;
+
+    private Vector3 touch_pos; //터치하고 있는 곳
+    private Vector3 move_dir; //움직이는 방향
+    private Vector3 vector3_temp; //임시로 넣는 temp vector
+
+    private LineRenderer _linerenderer;
+    
+    private const float skill_move_speed = 1.0f; //스킬창 뜨는속도
+    private bool is_moving; //마우스땠을때 움직이는 중인가
+    private bool is_skill_active; //스킬 active 되엇는가
+    private bool is_collision;//케릭터에 부딫혔을때
+
+    private CharacterStat characterStat;
+
+
+    void Start()
+    {
+
+        is_moving = false; is_skill_active = false; is_character_click = false;
+           _linerenderer = GetComponent<LineRenderer>();
+        _linerenderer.startWidth = 0.02f;
+        _linerenderer.endWidth = 0.02f;
+        is_collision = false;
+        _animator = this.GetComponent<Animator>();
+        characterStat=this.GetComponent<CharacterStat>();
+        StartCoroutine(CharacterNormalAttack(characterStat.Attack_speed));
+        if (characterStat.char_num == 0) //드루이드인 경우 일정시간마다 위습 생성
+        {
+            StartCoroutine(WispGenerator());
+        }
+
+    }
+
+
+    void Update()
+    {
+        if (Input.GetMouseButtonDown(0)) //누르는 순간
+        {   
+            is_skill_active = false;
+            Init_skill();            
+            //Vector2 pos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+            //RaycastHit2D hit = Physics2D.Raycast(pos, Vector2.zero,1000f,1<<8);   //collider가 발쪽에만 있기때문에 어떻게 잡을수 있게 할것인지 koki     1<<8 의미는 케릭터만 클릭하겠다는것
+
+            pos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+            hit = Physics2D.Raycast(pos, Vector2.zero, 1000f, 1 << 14);
+
+            _linerenderer.positionCount = 2;
+            _linerenderer.material= Resources.Load<Material>("Material/green");
+
+
+            if (clickpanel.GetComponent<CharacterClick>().IsThisCharacter(hit))
+            {
+                if (GameObject.Find("player_select_arrow_1(Clone)"))    
+                        Destroy(GameObject.Find("player_select_arrow_1(Clone)"));//화살표 제거
+                GameManage.instance.selected_player =null;
+                if (!this.CompareTag("Player")) return;
+                is_character_click = false;
+                target_object = null;
+                _player = this.gameObject; //클릭할때 player 오브젝트 받고
+                _rigidbody = _player.GetComponent<Rigidbody2D>(); //rigidbody 넣어주고
+                is_moving = false;
+                temp = Instantiate(Select_player_arrow_prefab, this.transform); //화살표 효과
+                GameManage.instance.selected_player = this.gameObject;
+            }
+        }
+
+        else if (Input.GetMouseButton(0) &&!is_moving&&_player!=null&&this.tag=="Player") //클릭하는동안 바로바로움직임 가는 곳 보여야함
+        {            
+            touch_pos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+            touch_pos.z = this.transform.position.z; //z축은 안움직이도록
+            move_dir = (touch_pos - this.transform.position).normalized;
+
+            vector3_temp = touch_pos - this.transform.position;
+            //선 보이기     
+            _linerenderer.SetPosition(0, _player.transform.position);
+            _linerenderer.SetPosition(1, touch_pos);
+
+
+            if(!_animator.GetBool("Attack")) //때리는동안 움직임 없도록            그리고 스킬준비, 스킬 시전때에도
+            {
+                _animator.SetFloat("DirX", vector3_temp.x);
+                _animator.SetFloat("DirY", vector3_temp.y);
+                _animator.SetBool("Running", true);
+                _player.transform.Translate(move_dir * move_speed * Time.deltaTime); //움직임
+            }
+
+
+
+        }
+
+        else if (Input.GetMouseButtonUp(0) &&!is_moving && _player != null && this.tag == "Player")
+        {
+            Vector2 pos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+            RaycastHit2D hit = Physics2D.Raycast(pos, Vector2.zero, 0.5f);
+            if(hit)
+            {
+                if (hit.collider.gameObject.tag == "Boss")//보스에서 마우스를 때는 경우
+                {
+                    target_object = hit.collider.gameObject;
+                    _linerenderer.material = Resources.Load<Material>("Material/red");
+                }
+                else
+                {
+                    target_pos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+                }
+            }
+            else
+            {
+                target_pos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+            }
+            is_moving = true;
+            //여기 스킬 뜨기
+            for (int i = 0; i < skillBackground.Length; i++)
+                skillBackground[i].SetActive(true);
+            SetSkill(characterStat.char_num); //koki 케릭터 번호를 넣어주어야함
+            is_skill_active = true;
+        }
+        else if(Input.GetMouseButton(0)&&this.tag!="Player") //죽은경우 또는 상태 이상인경우
+        {
+            _linerenderer.positionCount = 0; //선 없애기
+        }
+
+        if (is_moving&&this.tag=="Player") //마우스 때고나서 움직임
+        {
+            if(target_object != null)
+            {
+                target_pos = target_object.transform.position;
+            }
+            target_pos.z = this.transform.position.z; //z축은 안움직이도록
+            move_dir = (target_pos - this.transform.position).normalized;
+
+            _animator.SetFloat("DirX", move_dir.x);
+            _animator.SetFloat("DirY", move_dir.y);
+            _animator.SetBool("Running", true);
+
+            _player.transform.Translate(move_dir * move_speed * Time.deltaTime); //움직임
+
+            _linerenderer.positionCount = 2;
+            _linerenderer.SetPosition(0, _player.transform.position);
+            _linerenderer.SetPosition(1, target_pos);
+
+
+            //가는도중 거의 다 도착하면    또는 부딫히면
+            if ((target_pos-this.transform.position).magnitude< move_speed * Time.deltaTime || is_collision)
+            {
+                _player = null;
+                _rigidbody = null;
+                is_moving = false;
+                _linerenderer.positionCount = 0;
+                _animator.SetBool("Running", false);
+
+            }
+        }
+        else if(is_moving&&this.tag!="Player") //마우스는 땟지만 죽어있을때
+        {
+            _player = null;
+            _rigidbody = null;
+            is_moving = false;
+            _linerenderer.positionCount = 0;
+        }
+
+
+        if(is_skill_active) //스킬창이 십자로 뜨도록   크기/포지션
+        {
+            if(skillBackground[0].transform.localPosition.y < 40.0f)
+            {
+                skillBackground[0].transform.Translate(transform.up * skill_move_speed );
+                skillBackground[1].transform.Translate(transform.right * skill_move_speed);
+                skillBackground[2].transform.Translate(-transform.up * skill_move_speed);
+                skillBackground[3].transform.Translate(-transform.right * skill_move_speed);  //포지션 변화
+            }
+            if(skillBackground[0].transform.localScale.x<1.3f) //크기변화
+            {
+                skillBackground[0].transform.localScale += new Vector3(0.2f, 0.2f);
+                skillBackground[1].transform.localScale += new Vector3(0.2f, 0.2f);
+                skillBackground[2].transform.localScale += new Vector3(0.2f, 0.2f);
+                skillBackground[3].transform.localScale += new Vector3(0.2f, 0.2f);
+            }
+        }
+    }
+
+    private void SetSkill(int _char) //케릭터 번호가 인자
+    {
+        //케릭터에 맞는 이미지로 바꾸어줌  스킬 그림 그리고 넣어주세요
+        switch(_char)
+        {
+            case 0:
+
+                skillButton[0].GetComponent<Image>().sprite = Resources.Load<Sprite>("skillicon/a");
+                
+                break;
+            case 2:
+
+                skillButton[0].GetComponent<Image>().sprite = Resources.Load<Sprite>("skillicon/HolyKnight_skill1_Icon");
+                skillButton[1].GetComponent<Image>().sprite = Resources.Load<Sprite>("skillicon/HolyKnight_skill2_Icon");
+                skillButton[2].GetComponent<Image>().sprite = Resources.Load<Sprite>("skillicon/HolyKnight_skill3_Icon");
+                skillButton[3].GetComponent<Image>().sprite = Resources.Load<Sprite>("skillicon/HolyKnight_skill4_Icon");
+                break;
+        }
+
+    }
+    private void Init_skill() //스킬 칸 다시 제자리로 돌아가기
+    {
+        skillBackground[0].transform.localPosition = new Vector3(0, 0, 0);
+        skillBackground[1].transform.localPosition = new Vector3(0, 0, 0);
+        skillBackground[2].transform.localPosition = new Vector3(0, 0, 0);
+        skillBackground[3].transform.localPosition = new Vector3(0, 0, 0);
+
+        skillBackground[0].transform.localScale = new Vector3(0, 0);
+        skillBackground[1].transform.localScale = new Vector3(0, 0);
+        skillBackground[2].transform.localScale = new Vector3(0, 0);
+        skillBackground[3].transform.localScale = new Vector3(0, 0);
+    }
+
+
+
+    private void OnCollisionEnter2D(Collision2D collision)
+    {
+        if (collision.collider.isTrigger==false&&collision.gameObject.tag=="Player") //케릭터끼리면
+        {
+            is_collision = true;
+
+            vector3_temp.x = (collision.transform.position.x - this.transform.position.x)  * Time.deltaTime;
+            vector3_temp.y = (collision.transform.position.y - this.transform.position.y)  * Time.deltaTime;
+
+            this.transform.position -= vector3_temp;
+            collision.transform.position += vector3_temp;
+        }
+
+        if(collision.collider.isTrigger == false&&collision.gameObject.tag=="Boss") //보스한테 부딫히면
+        {
+            is_collision = true;
+            vector3_temp.x = (collision.transform.position.x - this.transform.position.x) * Time.deltaTime;
+            vector3_temp.y = (collision.transform.position.y - this.transform.position.y) * Time.deltaTime;
+
+            this.transform.position -= vector3_temp;
+        }
+
+    }
+
+    private void OnCollisionExit2D(Collision2D collision)
+    {
+        if (collision.gameObject.tag == "Player") //케릭터끼리면
+        {
+            is_collision = false;
+        }
+        if (collision.gameObject.tag == "Boss") //보스한테 부딫히면
+        {
+            is_collision = false;
+        }
+    }
+
+    IEnumerator CharacterNormalAttack(float attack_speed)
+    {
+        while (this.tag=="Player") //살아있거나 상태이상 이 아닐때
+        {
+            if (characterStat.Attack_range > Vector3.Distance(BossStatus.instance.transform.position, this.transform.position)&& !_animator.GetBool("Running")) //공격할만큼 가까운 거리일때 , 가만히 있을때
+            {
+                //공격모션
+                vector3_temp = BossStatus.instance.transform.position - this.transform.position;
+                _animator.SetFloat("DirX", vector3_temp.x);
+                _animator.SetFloat("DirY", vector3_temp.y);
+
+                _animator.SetBool("Attack", true);
+                //공격모션간 대기
+                yield return new WaitForSeconds(0.7f);
+                _animator.SetBool("Attack", false);
+
+                //공격이펙트 (무조건 맞는 걸로)
+
+                BossStatus.instance.BossGetDamage(characterStat.PhysicalAttackPower, false);
+            }
+            yield return new WaitForSeconds(attack_speed);
+        }
+
+    }
+
+    
+
+    IEnumerator WispGenerator()
+    {
+        while(this.tag == "Player" ) //살아있는경우에만
+        {
+            yield return new WaitForSeconds(5f);
+            if (characterStat.char_num==0) //녹색 드루인경우에만
+            {
+                SkillManager.instance.GenerateWisp(this.gameObject);
+            }
+        }
+        yield return true;
+
+    }
+
+}

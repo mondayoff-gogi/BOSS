@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 340365001158e744988289f25cdf7c39
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - icon: {instanceID: 0}
+  - itemCount_Text: {instanceID: 0}
+  - selected_Item: {instanceID: 0}
+  - lock_icon: {fileID: 21300000, guid: e9acbfc78e59847b4b400e1e7ef7b35d, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

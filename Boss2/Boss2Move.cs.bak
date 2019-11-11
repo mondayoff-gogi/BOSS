@@ -1,0 +1,1025 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class Boss2Move : MonoBehaviour
+{
+    // 현재 실행할 코루틴을 가지고 있음. 
+    IEnumerator _current;
+
+
+    // 어그로 구조체
+    public struct _aggro
+    {
+        public float distance;
+        public float attackAggro;
+        public float healAggro;
+        public float goldHand;
+
+        public _aggro(float dis, float atAg, float hAg, float goldHand)
+        {
+            this.distance = dis;
+            this.attackAggro = atAg;
+            this.healAggro = hAg;
+            this.goldHand = goldHand;
+        }
+    }
+
+    // 플레이어의 수를 확인하고 배열의 인덱스로 사용
+    enum _PLAYER
+    {
+        NONE = -1,
+        PLAYER_1 = 0,
+        PLAYER_2,
+        PLAYER_NUM
+    }
+
+    enum _BossAct
+    {
+        Stay = -1,
+        Chasing,
+        Attacking,
+        ClockwiseExplosion,
+        SameDir,
+        OppositeDir,
+        FireBar1,
+        FireBar2,
+        FireBar3,
+        Magnetic
+    }
+
+    // 타겟 플레이어 임시 저장 변수
+    [HideInInspector]
+    public GameObject temp_target_player;
+
+    public GameObject[] skill_prefab; //이거 나중에 resource로 옮겨서 소스에서 넣기
+
+    // 플레이어1 오브젝트
+    public GameObject[] player_Object = new GameObject[(int)_PLAYER.PLAYER_NUM];
+
+    public float[] skill_cooltime; //스킬 쿨타임 용 배열  나중엔 private으로 바꿔야함    
+    [HideInInspector]
+    public float[] AggroSum;
+
+    // 플레이어 어그로 구조체를 담아서 보관할 배열
+    public _aggro[] Players_Aggro;
+
+    // 이동 속도
+    [HideInInspector]
+    public float walkSpeed = 1.0f;
+
+    // 도착했는가 (도착했다 true / 도착하지 않았다 false)
+    [HideInInspector]
+    public bool arrived = false;
+
+   
+    //private bool is_sandstrom_used = false;
+
+    private bool is_HP_first = false;
+    private bool is_HP_second = false;
+    private bool is_HP_third = false;
+
+    private Animator _animator;
+    private SpriteRenderer _spriteRenderer;
+    private int boss_act_num = 0;
+
+    private int max_aggro_playerNum;
+
+    private float[] skill_cooltime_temp;
+    // 시간 임시 변수
+
+    private float max_aggro;
+
+    // 목적지에 도착했다고 보는 정지 거리
+    const float StoppingDistance = 2 + .0f;    
+
+    private GameObject target_player;
+
+    private GameObject[] skill_prefab_temp; //스킬 이펙트 넣기 위한 배열
+    /*
+     * 0.노말 어택
+     * 1.기모으기 이펙트
+     * 2.일자로 나가는 범위 이펙트
+     * 6.기둥 마법진
+     * 7.기둥
+     * 10.몬스터 나오는곳 표시
+     * 11.몬스터
+     * 12.모래바람
+     */
+    private WaitForSeconds waitforsec;
+
+    private Vector3 pos_memo; //pos기억용
+
+    private Vector3 vector3_temp; //스킬 활용할때 쓰는 임시용 vector
+
+    public Vector3 vector3_throw_attack;
+
+    // 현재 이동 속도
+    private Vector3 velocity = Vector3.zero;
+
+    // 목적지
+    private Vector3 destination;
+
+    public Camera main;
+
+    private int foothold_Count = 0;
+
+    private Vector3 temp_vec;
+
+    private void Start()
+    {
+        Players_Aggro = new _aggro[(int)_PLAYER.PLAYER_NUM];
+        AggroSum = new float[player_Object.Length];
+        InitializeAggro();
+        skill_prefab_temp = new GameObject[skill_prefab.Length];
+        skill_cooltime_temp = new float[skill_cooltime.Length];
+        walkSpeed = BossStatus.instance.moveSpeed;
+        for (int i = 0; i < skill_cooltime.Length; i++)
+        {
+            skill_cooltime_temp[i] = 0;
+        }
+        _animator = this.GetComponent<Animator>();
+        _spriteRenderer = this.GetComponent<SpriteRenderer>();
+        waitforsec = new WaitForSeconds(0.01f);
+        StartCoroutine(Exec());
+    }
+
+    private void Update()
+    {
+        BossAct(boss_act_num);
+
+    }
+
+    IEnumerator Exec()
+    {
+        while (true)
+        {
+            yield return new WaitForSeconds(2.0f);
+            AggroSum = BossStatus.instance.ReturnAggro();
+
+        }
+    }
+    public void EndofGame()
+    {
+        boss_act_num = (int)_BossAct.Stay;
+    }
+
+    public void SelectTarget()
+    {
+        max_aggro = -100;
+        for (int i = 0; i < player_Object.Length; i++)
+        {
+            if (AggroSum[i] > max_aggro)
+            {
+                max_aggro = AggroSum[i];
+                max_aggro_playerNum = i;
+            }
+        }
+        if (target_player != player_Object[max_aggro_playerNum])
+        {
+            target_player = player_Object[max_aggro_playerNum];
+            BossStatus.instance.target_player = target_player;
+        }
+
+    }
+
+    private bool MovetoTarget()
+    {
+        int temp = 0;
+        for (int i = 0; i < player_Object.Length; i++)
+        {
+            if (player_Object[i].tag == "DeadPlayer")
+                temp++;
+        }
+        if (player_Object.Length == temp)
+        {
+            boss_act_num = (int)_BossAct.Stay;
+            return true;
+        }
+
+        Move(target_player.transform.position);
+        return false;
+    }
+
+    public void Move(Vector3 destination)
+    {
+        Vector3 Destination = destination;
+        Destination.z = transform.position.z;
+
+
+        // 목적지까지의 거리와 방향을 구한다.
+        // 방향
+        Vector3 direction = (Destination - transform.position).normalized;
+        // 거리
+        float distance = Vector3.Distance(this.gameObject.transform.position, Destination);
+
+
+        _animator.SetFloat("DirX", direction.x);
+        _animator.SetFloat("DirY", direction.y);
+        // 현재 속도를 보관
+        Vector3 currentVelocity = velocity;
+
+        // 목적지에 가까이 왔으면 도착
+        if (arrived || distance < StoppingDistance)
+        {
+            arrived = true;
+        }
+
+        // 일정거리에 도달하지 않으면 도착하지 않은것
+        if (distance > StoppingDistance)
+        {
+            _animator.SetBool("Running", true);
+            arrived = false;
+        }
+
+        // 도착했으면 멈추고 아니면 속도를 구함
+        if (arrived)
+        {
+            velocity = Vector3.zero;
+            if (_animator.GetBool("Running"))
+            {
+                _animator.SetBool("Running", false);
+            }
+        }
+        else
+            velocity = direction * walkSpeed;
+
+        // 보간처리
+        velocity = Vector3.Lerp(currentVelocity, velocity, Mathf.Min(Time.deltaTime * 5.0f, 1.0f));
+        velocity.z = 0;
+        walkSpeed = BossStatus.instance.moveSpeed;
+        this.gameObject.transform.Translate(velocity * 2.0f * Time.deltaTime);
+
+    }
+
+    // 최초 어그로 초기화.
+    public void InitializeAggro()
+    {
+        for (int i = 0; i < (int)_PLAYER.PLAYER_NUM; i++)
+        {
+            Players_Aggro[i] = new _aggro(0, 0, 0, 0);
+            AggroSum[i] = 0;
+        }
+    }
+
+    public void DecreaseAggro()
+    {
+        for (int i = 0; i < (int)_PLAYER.PLAYER_NUM; i++)
+        {
+            AggroSum[i] -= 2.0f;
+        }
+    }
+
+    private void BossAct(int act_num)
+    {
+        BossStatus.instance.MP += Time.deltaTime;
+        if (BossStatus.instance.MP > BossStatus.instance.MaxMp)
+        {
+            BossStatus.instance.MP = BossStatus.instance.MaxMp;
+        }
+        if (BossStatus.instance.HP <= 0)
+        {
+            act_num = (int)_BossAct.Stay;
+        }
+
+
+        skill_cooltime_temp[0] += Time.deltaTime; //평타쿨타임
+        skill_cooltime_temp[1] += Time.deltaTime; //Clockwise
+        skill_cooltime_temp[2] += Time.deltaTime; //SameDir
+        skill_cooltime_temp[3] += Time.deltaTime; //OppositeDir
+
+        SelectTarget();
+
+        switch (act_num)
+        {
+
+            case (int)_BossAct.Stay:
+                if (BossStatus.instance.Silent)
+                {
+                    BossGetSilent();
+                    boss_act_num = (int)_BossAct.Chasing;
+                    BossStatus.instance.BossSilentAble(false);
+                    BossStatus.instance.Silent = false;
+                }
+                break;
+            case (int)_BossAct.Chasing:
+                if (MovetoTarget()) return;
+                //boss_act_num = (int)_BossAct.SameDir; //테스트용으로 쓰는 코드
+                //break;
+                if (BossStatus.instance.MP >= BossStatus.instance.MaxMp) //자석소환! : mp max일때 소환
+                {
+                    BossStatus.instance.MP = 0;
+                    boss_act_num = (int)_BossAct.Magnetic;
+                    break;
+                }
+                if (BossStatus.instance.HP / BossStatus.instance.MaxHP < 0.775 && !is_HP_first) //불도저
+                {
+                    is_HP_first = true;
+                    boss_act_num = (int)_BossAct.FireBar1;
+                    break;
+                }
+                if (BossStatus.instance.HP / BossStatus.instance.MaxHP < 0.5 &&!is_HP_second&&!skill_prefab[13].activeSelf)
+                {
+                    is_HP_second = true;
+                    boss_act_num = (int)_BossAct.FireBar2;
+                    break;
+                }
+                if (BossStatus.instance.HP / BossStatus.instance.MaxHP < 0.225 && !is_HP_third && !skill_prefab[13].activeSelf/* && UpLoadData.boss_level >= 2*/)
+                {
+                    is_HP_third = true;
+                    boss_act_num = (int)_BossAct.FireBar3;
+                    break;
+                }
+                if (skill_cooltime_temp[3] > skill_cooltime[3]) //Opposite
+                {
+                    skill_cooltime_temp[3] = 0;
+                    boss_act_num = (int)_BossAct.OppositeDir;
+                    break;
+                }
+                if (skill_cooltime_temp[2] > skill_cooltime[2]) //SameDir
+                {
+                    skill_cooltime_temp[2] = 0;
+                    boss_act_num = (int)_BossAct.SameDir;
+                    break;
+                }
+                if (skill_cooltime_temp[1] > skill_cooltime[1]) //CLOCKwise
+                {
+                    skill_cooltime_temp[1] = 0;
+                    boss_act_num = (int)_BossAct.ClockwiseExplosion;
+                    break;
+                }
+                if (skill_cooltime_temp[0] > skill_cooltime[0]) //평타
+                {
+                    skill_cooltime_temp[0] = 0;
+                    boss_act_num = (int)_BossAct.Attacking;
+                    break;
+                }
+                break;
+
+            case (int)_BossAct.Attacking:
+                StartCoroutine(Attack_active());
+                boss_act_num = (int)_BossAct.Stay;
+                break;
+
+            case (int)_BossAct.ClockwiseExplosion:
+                StartCoroutine(ClockwiseExplosionSkill());
+                boss_act_num = (int)_BossAct.Stay;
+                break;
+
+            case (int)_BossAct.SameDir:
+                StartCoroutine(SameDir());
+                boss_act_num = (int)_BossAct.Stay;
+                break;
+
+            case (int)_BossAct.OppositeDir:
+                StartCoroutine(OppositeDirSkill());
+                boss_act_num = (int)_BossAct.Stay;
+                break;
+
+            case (int)_BossAct.Magnetic:
+                StartCoroutine(MagneticSkill());
+                boss_act_num = (int)_BossAct.Stay;
+                break;
+
+            case (int)_BossAct.FireBar1:
+                StartCoroutine(FireBarSkill(1));
+                boss_act_num = (int)_BossAct.Stay;
+                break;
+            case (int)_BossAct.FireBar2:
+                StartCoroutine(FireBarSkill(2));
+                boss_act_num = (int)_BossAct.Stay;
+                break;
+            case (int)_BossAct.FireBar3:
+                StartCoroutine(FireBarSkill(3));
+                boss_act_num = (int)_BossAct.Stay;
+                break;
+        }
+    }
+
+    // 기본 공격
+    IEnumerator Attack_active()
+    {
+        Quaternion temp;
+        _animator.SetBool("Running", false);
+        _animator.SetBool("Attack", true);
+
+        skill_prefab_temp[0] = Instantiate(skill_prefab[0], this.transform); // Warning
+        skill_prefab_temp[0].transform.localScale = new Vector3(12f, 0.5f);
+        if (target_player.transform.position.x - this.transform.position.x > 0)
+            skill_prefab_temp[0].transform.rotation = Quaternion.Euler(0, 0, Mathf.Rad2Deg * Mathf.Atan((target_player.transform.position.y - this.transform.position.y) / (target_player.transform.position.x - this.transform.position.x)));
+        else
+            skill_prefab_temp[0].transform.rotation = Quaternion.Euler(0, 0, 180 + Mathf.Rad2Deg * Mathf.Atan((target_player.transform.position.y - this.transform.position.y) / (target_player.transform.position.x - this.transform.position.x)));
+
+
+        temp = skill_prefab_temp[0].transform.rotation;
+
+        temp_vec = (target_player.transform.position - this.transform.position) * 0.1f;
+        temp_vec.Normalize();
+
+
+        Destroy(skill_prefab_temp[0], 1.5f);
+        yield return new WaitForSeconds(1.5f);
+        _animator.SetBool("Attack", false);
+
+
+        for (int i = 0; i < 10; i++)
+        {
+            skill_prefab_temp[3] = Instantiate(skill_prefab[3], this.transform.position +  temp_vec * i * 1.2f, Quaternion.identity);
+            Destroy(skill_prefab_temp[3], 1f);
+            skill_prefab_temp[2] = Instantiate(skill_prefab[2], this.transform.position + temp_vec * i * 1.2f, Quaternion.identity);
+            main.GetComponent<Camera_move>().VivrateForTime(0.1f);
+            yield return new WaitForSeconds(0.1f);
+        }
+
+
+        _animator.SetBool("AttackEnd", true);
+        yield return new WaitForSeconds(0.2f);
+        _animator.SetBool("AttackEnd", false);
+
+
+        boss_act_num = (int)_BossAct.Chasing;
+        yield return 0;
+    }
+
+    IEnumerator ClockwiseExplosionSkill()
+    {
+        _animator.SetBool("Running", false);
+        _animator.SetBool("Attack", true);
+
+        BossStatus.instance.BossSilentAble(true);
+
+        float Alarmtimer = 2f;
+
+        skill_prefab_temp[0] = Instantiate(skill_prefab[0], new Vector2(0,0),Quaternion.identity); // Warning
+        skill_prefab_temp[0].transform.localScale = new Vector3(50f, 9f);
+        skill_prefab_temp[0].transform.position = new Vector2(-12, 4.5f);
+        Destroy(skill_prefab_temp[0], 2f);
+
+
+        skill_prefab_temp[0] = Instantiate(skill_prefab[0], new Vector2(0, 0), Quaternion.identity); // Warning
+        skill_prefab_temp[0].transform.localScale = new Vector3(50f, 9f);
+        skill_prefab_temp[0].transform.Rotate(0, 0, 180);
+        skill_prefab_temp[0].transform.position = new Vector2(12, -4.5f);
+        Destroy(skill_prefab_temp[0], 2f);
+
+        yield return new WaitForSeconds(Alarmtimer);
+        BossStatus.instance.BossSilentAble(false);
+
+        skill_prefab_temp[4] = Instantiate(skill_prefab[4], new Vector2(-12, 4.5f), Quaternion.identity); // Warning
+        skill_prefab_temp[4].transform.localScale = new Vector3(1f, 0.9f);
+        skill_prefab_temp[4].transform.Rotate(0, 0, 0);
+
+        skill_prefab_temp[4] = Instantiate(skill_prefab[4], new Vector2(12, -4.5f), Quaternion.identity); // Warning
+        skill_prefab_temp[4].transform.localScale = new Vector3(1f, 0.9f);
+        skill_prefab_temp[4].transform.Rotate(0, 0, 180);
+
+        main.GetComponent<Camera_move>().VivrateForTime(0.5f);
+
+
+        skill_prefab_temp[0] = Instantiate(skill_prefab[0], new Vector2(0, 0), Quaternion.identity); // Warning
+        skill_prefab_temp[0].transform.localScale = new Vector3(36f, 12f);
+        skill_prefab_temp[0].transform.Rotate(0, 0, -90);
+        skill_prefab_temp[0].transform.position = new Vector2(6, 9f);
+        Destroy(skill_prefab_temp[0], 2f);
+
+        skill_prefab_temp[0] = Instantiate(skill_prefab[0], new Vector2(0, 0), Quaternion.identity); // Warning
+        skill_prefab_temp[0].transform.localScale = new Vector3(36f, 12f);
+        skill_prefab_temp[0].transform.Rotate(0, 0, 90);
+        skill_prefab_temp[0].transform.position = new Vector2(-6, -9f);
+        Destroy(skill_prefab_temp[0], 2f);
+
+        yield return new WaitForSeconds(Alarmtimer);       
+
+        skill_prefab_temp[4] = Instantiate(skill_prefab[4], new Vector2(6, 9f), Quaternion.identity); // Warning
+        skill_prefab_temp[4].transform.localScale = new Vector3(1f, 1.2f);
+        skill_prefab_temp[4].transform.Rotate(0, 0, -90);        
+        skill_prefab_temp[4] = Instantiate(skill_prefab[4], new Vector2(-6, -9f), Quaternion.identity); // Warning
+        skill_prefab_temp[4].transform.localScale = new Vector3(1f, 1.2f);
+        skill_prefab_temp[4].transform.Rotate(0, 0, 90);        
+
+
+        main.GetComponent<Camera_move>().VivrateForTime(0.5f);
+        _animator.SetBool("Attack", false);
+
+
+
+        _animator.SetBool("AttackEnd", true);
+        yield return new WaitForSeconds(1f);
+        _animator.SetBool("AttackEnd", false);
+
+
+        boss_act_num = (int)_BossAct.Chasing;
+        yield return 0;
+    }
+
+    IEnumerator SameDir()
+    {
+        int dis = Random.Range(1, 5);
+        _animator.SetBool("Running", false);
+        _animator.SetBool("Attack", true);
+
+        GameObject[] object_temp = GameObject.FindGameObjectsWithTag("Boss2NormalAttack");
+        for(int i = 0; i < object_temp.Length; i++)
+        {
+            skill_prefab_temp[11] = Instantiate(skill_prefab[11], object_temp[i].transform.position, Quaternion.identity);
+            Destroy(skill_prefab_temp[11], 1f);
+            Destroy(object_temp[i], 0.2f);
+        }
+
+        for (int i = 0; i < player_Object.Length; i++)
+        {
+            if(player_Object[i].tag == "Player")
+            {
+                skill_prefab_temp[1] = Instantiate(skill_prefab[1], player_Object[i].transform); // Warning
+                skill_prefab_temp[1].transform.localScale = new Vector3(2f, 2f);
+                Destroy(skill_prefab_temp[1], 2f);
+            }
+;
+        }
+        yield return new WaitForSeconds(2f);
+
+
+        //둘이 붙게됨
+        int t = 0;
+        for (int i = 0; i < player_Object.Length; i++)
+        {
+            if (player_Object[i].tag == "Player")
+                t++;
+        }
+
+        if( t >= 2)
+        {
+            for (int i = 0; i < player_Object.Length; i += 2)
+            {
+                player_Object[i].GetComponent<Character_Control>().is_MoveTogether = true;
+                player_Object[i].GetComponent<Character_Control>().SameDirMove(player_Object[i + 1]);
+                player_Object[i + 1].GetComponent<Character_Control>().is_MoveTogether = true;
+                player_Object[i + 1].GetComponent<Character_Control>().SameDirMove(player_Object[i]);
+            }
+        }
+        else
+        {
+            Debug.Log(2);
+        }
+
+        _animator.SetBool("Attack", false);
+
+        _animator.SetBool("AttackEnd", true);
+        if(t >=2)
+        {
+            player_Object[0].transform.position = new Vector3(player_Object[0].transform.position.x -(dis / 2f), player_Object[0].transform.position.y, player_Object[0].transform.position.z);
+            player_Object[1].transform.position = new Vector3(player_Object[1].transform.position.x +(dis / 2f), player_Object[0].transform.position.y, player_Object[0].transform.position.z);
+            for (int i = 0; i < player_Object.Length; i++)
+            {
+                skill_prefab_temp[7] = Instantiate(skill_prefab[7], player_Object[i].transform);
+                Destroy(skill_prefab_temp[7], 10f);
+                player_Object[i].GetComponent<Character_Control>().RunningStop();
+            }
+        }
+        else
+        {
+            for(int i = 0; i < player_Object.Length; i++)
+            {
+                if(player_Object[i].tag == "Player")
+                {
+                    player_Object[i].transform.position = new Vector3(0,0, player_Object[0].transform.position.z);
+                    skill_prefab_temp[7] = Instantiate(skill_prefab[7], player_Object[i].transform);
+                    Destroy(skill_prefab_temp[7], 10f);
+                    player_Object[i].GetComponent<Character_Control>().RunningStop();
+                }
+            }
+        }
+
+        /*************** 랜덤 위치 생성 ****************/
+        Vector3[] foothold_position = new Vector3[11];
+        foothold_position[0] = Random.insideUnitSphere * 3f + player_Object[0].transform.position;
+        foothold_position[0].z = -500;
+        foothold_position[10] = new Vector3(foothold_position[0].x + dis, foothold_position[0].y, foothold_position[0].z);
+
+        for (int i = 1; i < foothold_position.Length - 1; i++)
+        {
+            Vector3 temp = Random.insideUnitSphere * 8f;
+            temp.z = -500; 
+            foothold_position[i] = temp;
+        }
+        int tmp = Random.Range(0, 3);
+        if (tmp == 0)
+        {
+
+            foothold_position[0] = new Vector3(foothold_position[0].x - 6f, foothold_position[0].y, foothold_position[0].z);
+            foothold_position[0] = new Vector3(foothold_position[10].x, foothold_position[0].y + 6f, foothold_position[10].z);
+        }
+        // 세로
+        else if (tmp == 1)
+        {
+
+            foothold_position[0] = new Vector3(foothold_position[0].x + 6f, foothold_position[0].y, foothold_position[0].z);
+            foothold_position[10] = new Vector3(foothold_position[10].x, foothold_position[0].y - 6f, foothold_position[10].z);
+        }
+        else
+        {
+            foothold_position[0] = new Vector3(foothold_position[0].x + 6f, foothold_position[0].y, foothold_position[0].z);
+            foothold_position[10] = new Vector3(foothold_position[10].x - 6f, foothold_position[0].y, foothold_position[10].z);
+        }
+
+        GameObject[] bombs = new GameObject[foothold_position.Length];
+        /*************** 랜덤 위치에 폭탄 생성 ****************/
+        for (int i = 0; i < foothold_position.Length; i++)
+        {
+            main.GetComponent<Camera_move>().VivrateForTime(0.1f);
+            bombs[i] = Instantiate(skill_prefab[8], foothold_position[i], Quaternion.identity);
+            yield return new WaitForSeconds(0.2f);
+        }
+        for(int i = 1; i < foothold_position.Length - 1; i++)
+        {
+            int temp = Random.Range(-1, 2);
+            bombs[i].GetComponent<Boss2_SameDir>().Move(new Vector3(temp, 0, 0));            
+        }
+        if (tmp == 0)
+        {
+            bombs[10].GetComponent<Boss2_SameDir>().Move(new Vector3(0, -1, 0));
+            bombs[0].GetComponent<Boss2_SameDir>().Move(new Vector3(1, 0, 0));
+        }
+        // 세로
+        else if (tmp == 1)
+        {
+
+            bombs[10].GetComponent<Boss2_SameDir>().Move(new Vector3(0, 1, 0));
+            bombs[0].GetComponent<Boss2_SameDir>().Move(new Vector3(-1, 0, 0));
+        }
+        else
+        {
+            bombs[10].GetComponent<Boss2_SameDir>().Move(new Vector3(1, 0, 0));
+            bombs[0].GetComponent<Boss2_SameDir>().Move(new Vector3(-1, 0, 0));
+        }
+
+
+        //StartCoroutine(FadeOut());
+        yield return new WaitForSeconds(6f);
+        //StartCoroutine(FadeIn());
+
+        for (int i = 0; i < bombs.Length; i++)
+        {
+            if (bombs[i].GetComponent<Boss2_SameDir>().is_triggered)
+            {
+                foothold_Count++;
+            }
+        }
+        
+        if (foothold_Count >= 2)
+        {
+            Debug.Log(2);
+            _animator.SetBool("Attack", true);
+            for(int i =0; i < player_Object.Length; i++)
+            {
+                if(player_Object[i].tag == "Player")
+                {
+                    skill_prefab_temp[19] = Instantiate(skill_prefab[19], player_Object[i].transform);
+                    Destroy(skill_prefab_temp[19], 1f);
+                }
+
+            }
+            yield return new WaitForSeconds(1f);
+            for (int i = 0; i < player_Object.Length; i++)
+            {
+                if (player_Object[i].tag == "Player")
+                {
+                    player_Object[i].GetComponent<CharacterStat>().GetDamage(0, false);
+                }
+            }
+            main.GetComponent<Camera_move>().VivrateForTime(2f);
+
+            yield return new WaitForSeconds(1f);
+            _animator.SetBool("Attack", false);
+            _animator.SetBool("AttackEnd", false);
+            foothold_Count = 0;
+
+        }
+        else
+        {
+            _animator.SetBool("Attack", true);
+            for (int i = 0; i < player_Object.Length; i++)
+            {
+                if (player_Object[i].tag == "Player")
+                {
+                    skill_prefab_temp[20] = Instantiate(skill_prefab[20], player_Object[i].transform);
+                    Destroy(skill_prefab_temp[20], 1f);
+                }
+            }
+            yield return new WaitForSeconds(1f);
+
+            for (int i = 0; i < player_Object.Length; i++)
+            {
+                if (player_Object[i].tag == "Player")
+                {
+                    player_Object[i].GetComponent<CharacterStat>().GetDamage(99999, false);
+                }
+            }
+            main.GetComponent<Camera_move>().VivrateForTime(2f);
+
+            yield return new WaitForSeconds(1f);
+            _animator.SetBool("Attack", false);
+            _animator.SetBool("AttackEnd", false);
+            foothold_Count = 0;
+        }
+
+        for (int i = 0; i < player_Object.Length; i += 2)
+        {
+            player_Object[i].GetComponent<Character_Control>().is_MoveTogether = false;
+            player_Object[i + 1].GetComponent<Character_Control>().is_MoveTogether = false;
+        }
+
+        yield return new WaitForSeconds(2f);
+        boss_act_num = (int)_BossAct.Chasing;
+        yield return 0;
+    }
+
+    IEnumerator OppositeDirSkill()
+    {
+        _animator.SetBool("Running", false);
+        _animator.SetBool("Attack", true);
+
+
+        //특정위치 가운데 지정해주고
+        Vector2 Cord_centor;
+        float x, y;
+        x = Random.Range(-3, 3);
+        y = Random.Range(-3, 3);
+        Cord_centor = new Vector2(x, y);
+
+        //x y 정해서 얼마나 멀리 떨어진지 정하고
+        x = Random.Range(2, 4);
+        y = Random.Range(2, 4);
+
+        Vector2 vec2_temp;
+        vec2_temp.x = Cord_centor.x + x;
+        vec2_temp.y = Cord_centor.y + y;
+
+        //먼저 위치 잘 가도록 유도하고
+        skill_prefab_temp[9] = Instantiate(skill_prefab[9], vec2_temp, Quaternion.identity); // Warning
+        skill_prefab_temp[9].transform.localScale = new Vector3(2f, 2f);
+
+        vec2_temp.x = Cord_centor.x - x;
+        vec2_temp.y = Cord_centor.y - y;
+
+        //먼저 위치 잘 가도록 유도하고
+        skill_prefab_temp[9] = Instantiate(skill_prefab[9], vec2_temp, Quaternion.identity); // Warning
+        skill_prefab_temp[9].transform.localScale = new Vector3(2f, 2f);
+
+        yield return new WaitForSeconds(4f);
+   
+        //가장먼저 서로 반대로 가게된다는 사인
+        for (int i = 0; i < player_Object.Length; i++)
+        {
+            skill_prefab_temp[1] = Instantiate(skill_prefab[1], player_Object[i].transform); // Warning
+            skill_prefab_temp[1].transform.localScale = new Vector3(2f, 2f);
+            Destroy(skill_prefab_temp[1], 10f);
+        }
+        //둘이 반대로가게됨
+        for (int i = 0; i < player_Object.Length; i += 2)
+        {
+            player_Object[i].GetComponent<Character_Control>().is_MoveTogether = true;
+            player_Object[i].GetComponent<Character_Control>().OppositeMove(player_Object[i + 1], skill_prefab[10]);
+            player_Object[i + 1].GetComponent<Character_Control>().is_MoveTogether = true;
+            player_Object[i + 1].GetComponent<Character_Control>().OppositeMove(player_Object[i], skill_prefab[10]);
+        }
+
+        vec2_temp = new Vector2(-12, 0);
+
+        main.GetComponent<Camera_move>().VivrateForTime(0.5f);
+        skill_prefab_temp[6] = Instantiate(skill_prefab[6], vec2_temp, Quaternion.identity); // Warning
+
+        yield return new WaitForSeconds(2f);
+
+      
+       
+        
+
+        //패턴생성
+        for (int j=0;j<3;j++)
+        {
+            //------------------------원하는 위치---------------------//
+            x = Random.Range(1, 4);
+            y = Random.Range(1, 4);
+
+            vec2_temp.x = Cord_centor.x + x;
+            vec2_temp.y = Cord_centor.y + y;
+
+            skill_prefab_temp[9] = Instantiate(skill_prefab[9], vec2_temp, Quaternion.identity);
+            skill_prefab_temp[9].transform.localScale = new Vector3(2f, 2f);
+
+            vec2_temp.x = Cord_centor.x - x;
+            vec2_temp.y = Cord_centor.y - y;
+
+            skill_prefab_temp[9] = Instantiate(skill_prefab[9], vec2_temp, Quaternion.identity);
+            skill_prefab_temp[9].transform.localScale = new Vector3(2f, 2f);
+            //----------------------원하는 위치-------------------------------//
+            //============랜덤위치=-============================//
+            for (int i = 0; i < 7; i++)
+            {
+                x = Random.Range(-4 + i / 10, 4);
+                y = Random.Range(-4 + i / 10, 4);
+                vec2_temp.x = x*2;
+                vec2_temp.y = y*2;
+                skill_prefab_temp[9] = Instantiate(skill_prefab[9], vec2_temp, Quaternion.identity);
+                skill_prefab_temp[9].transform.localScale = new Vector3(2f, 2f);
+            }
+            //============랜덤위치=-============================//
+
+            yield return new WaitForSeconds(3f);
+
+            //==========폭탄======================//
+            main.GetComponent<Camera_move>().VivrateForTime(0.5f);
+            vec2_temp = new Vector2(-12, 0);
+            skill_prefab_temp[6] = Instantiate(skill_prefab[6], vec2_temp, Quaternion.identity); // Warning
+
+            yield return new WaitForSeconds(2f);
+        }
+
+
+        _animator.SetBool("Attack", false);
+
+        _animator.SetBool("AttackEnd", true);
+        yield return new WaitForSeconds(1f);
+        _animator.SetBool("AttackEnd", false);
+
+        for (int i = 0; i < player_Object.Length; i += 2)
+        {
+            player_Object[i].GetComponent<Character_Control>().is_MoveTogether = false;
+            player_Object[i + 1].GetComponent<Character_Control>().is_MoveTogether = false;
+        }
+
+        boss_act_num = (int)_BossAct.Chasing;
+        yield return 0;
+    }
+
+    IEnumerator MagneticSkill()
+    {
+        _animator.SetBool("Running", false);
+        _animator.SetBool("Attack", true);
+
+        int t = 0;
+        for(int i = 0;i < player_Object.Length; i++)
+        {
+            if (player_Object[i].tag == "Player")
+                t++;
+        }
+        if(t == 1)
+        {
+            for (int i = 0; i < player_Object.Length; i++)
+            {
+                if (player_Object[i].tag == "Player")
+                {
+                    skill_prefab_temp[15] = Instantiate(skill_prefab[15], player_Object[i].transform);
+                    skill_prefab_temp[18] = Instantiate(skill_prefab[18], player_Object[i].transform);
+                    skill_prefab_temp[18].GetComponent<Boss2_Player_Magnetic>().GetMagnetic(false);
+                }
+            }
+        }
+        else
+        {
+            skill_prefab_temp[15] = Instantiate(skill_prefab[15], player_Object[0].transform);
+            skill_prefab_temp[18] = Instantiate(skill_prefab[18], player_Object[0].transform);
+            skill_prefab_temp[18].GetComponent<Boss2_Player_Magnetic>().GetMagnetic(false);
+
+            skill_prefab_temp[16] = Instantiate(skill_prefab[16], player_Object[1].transform);
+            skill_prefab_temp[18] = Instantiate(skill_prefab[18], player_Object[1].transform);
+            skill_prefab_temp[18].GetComponent<Boss2_Player_Magnetic>().GetMagnetic(true);
+        }
+
+
+        yield return new WaitForSeconds(1f);
+
+        //int position = Random.Range(0, 5);
+        Vector2 temp = new Vector2(6, 5);
+        main.GetComponent<Camera_move>().VivrateForTime(1f);
+
+        switch (UpLoadData.boss_level)
+        {
+            case 0:
+                skill_prefab_temp[17] = Instantiate(skill_prefab[17], temp, Quaternion.identity);
+                skill_prefab_temp[17].GetComponentInChildren<Boss2_ULT_Magnetic>().GetMagnetic(false);
+                break;
+
+            case 1:
+                skill_prefab_temp[17] = Instantiate(skill_prefab[17], temp, Quaternion.identity);
+                skill_prefab_temp[17].GetComponentInChildren<Boss2_ULT_Magnetic>().GetMagnetic(false);
+                skill_prefab_temp[17] = Instantiate(skill_prefab[17], -temp, Quaternion.identity);
+                skill_prefab_temp[17].GetComponentInChildren<Boss2_ULT_Magnetic>().GetMagnetic(true);
+                break;
+
+            case 2:
+                skill_prefab_temp[17] = Instantiate(skill_prefab[17], temp, Quaternion.identity);
+                skill_prefab_temp[17].GetComponentInChildren<Boss2_ULT_Magnetic>().GetMagnetic(false);
+                skill_prefab_temp[17] = Instantiate(skill_prefab[17], -temp, Quaternion.identity);
+                skill_prefab_temp[17].GetComponentInChildren<Boss2_ULT_Magnetic>().GetMagnetic(true);
+                temp = new Vector2(-6, 5);
+                skill_prefab_temp[17] = Instantiate(skill_prefab[17], temp, Quaternion.identity);
+                skill_prefab_temp[17].GetComponentInChildren<Boss2_ULT_Magnetic>().GetMagnetic(false);
+                break;
+
+            case 3:
+                skill_prefab_temp[17] = Instantiate(skill_prefab[17], temp, Quaternion.identity);
+                skill_prefab_temp[17].GetComponentInChildren<Boss2_ULT_Magnetic>().GetMagnetic(false);
+                skill_prefab_temp[17] = Instantiate(skill_prefab[17], -temp, Quaternion.identity);
+                skill_prefab_temp[17].GetComponentInChildren<Boss2_ULT_Magnetic>().GetMagnetic(true);
+                temp = new Vector2(-6, 5);
+                skill_prefab_temp[17] = Instantiate(skill_prefab[17], temp, Quaternion.identity);
+                skill_prefab_temp[17].GetComponentInChildren<Boss2_ULT_Magnetic>().GetMagnetic(false);
+
+                temp = new Vector2(-6, 5);
+                skill_prefab_temp[17] = Instantiate(skill_prefab[17], temp, Quaternion.identity);
+                skill_prefab_temp[17].GetComponentInChildren<Boss2_ULT_Magnetic>().GetMagnetic(false);
+                break;
+        }
+
+        skill_prefab_temp[21] = Instantiate(skill_prefab[21], this.transform);
+
+        _animator.SetBool("Attack", false);
+
+        _animator.SetBool("AttackEnd", true);
+        yield return new WaitForSeconds(20f);
+        _animator.SetBool("AttackEnd", false);
+
+        boss_act_num = (int)_BossAct.Chasing;
+        yield return 0;
+    }
+
+    IEnumerator FireBarSkill(int i)
+    {
+ 		_animator.SetBool("Running", false);
+        _animator.SetBool("Attack", true);
+
+        Vector2 vec2_temp;
+
+        vec2_temp = new Vector2(0, 0);
+        skill_prefab_temp[14] = Instantiate(skill_prefab[14], vec2_temp, Quaternion.identity); // 불솟음
+        skill_prefab_temp[14].transform.localScale = new Vector3(2f, 2f);
+        Destroy(skill_prefab_temp[14], 6f);
+        yield return new WaitForSeconds(2f);
+        _animator.SetBool("Attack", false);
+
+        switch (i)
+        {
+            case 1:
+                vec2_temp = new Vector2(12, 9);
+
+                //skill_prefab_temp[13] = Instantiate(skill_prefab[13], vec2_temp, Quaternion.identity); // Warning
+                skill_prefab[13].SetActive(true);
+                skill_prefab[13].GetComponent<Boss2_Fire>().StartCor();
+                skill_prefab[13].transform.position = vec2_temp;
+                skill_prefab[13].GetComponent<Monster>().MonsterHpbarSetActive();
+                break;
+            case 2:
+                vec2_temp = new Vector2(12, -9);
+                skill_prefab[13].SetActive(true);
+                skill_prefab[13].GetComponent<Boss2_Fire>().StartCor();
+                skill_prefab[13].transform.position = vec2_temp;
+                skill_prefab[13].GetComponent<Monster>().MonsterHpbarSetActive();
+                break;
+            case 3:
+                vec2_temp = new Vector2(-12, 9);
+                skill_prefab[13].SetActive(true);
+                skill_prefab[13].GetComponent<Boss2_Fire>().StartCor();
+                skill_prefab[13].transform.position = vec2_temp;
+                skill_prefab[13].GetComponent<Monster>().MonsterHpbarSetActive();
+                break;
+        }
+        yield return new WaitForSeconds(1f);
+        _animator.SetBool("AttackEnd", true);
+        yield return new WaitForSeconds(0.2f);
+        _animator.SetBool("AttackEnd", false);
+
+        _animator.SetBool("Running", true);
+
+        boss_act_num = (int)_BossAct.Chasing;
+        yield return 0;
+    }
+
+
+    public void BossGetSilent()
+    {
+        StopAllCoroutines();
+    }
+    public void BossGetSilent(GameObject prefab1, GameObject prefab2)
+    {
+        Destroy(prefab1);
+        Destroy(prefab2);
+        StopAllCoroutines();
+    }
+    
+    private void OnTriggerEnter2D(Collider2D collision)
+    {
+        if (collision.CompareTag("DeadPlayer"))
+        {
+
+            Physics2D.IgnoreCollision(this.GetComponent<CapsuleCollider2D>(), collision.GetComponent<CapsuleCollider2D>());
+        }
+
+    }
+
+    public void ChangeBossAct(int index)
+    {
+        boss_act_num = index;
+    }
+}

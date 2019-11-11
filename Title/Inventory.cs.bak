@@ -1,0 +1,382 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using System;
+using UnityEngine.UI;
+
+public class Inventory : MonoBehaviour
+{
+    // 오디오 매니저 필요
+
+    // 인벤토리 슬롯들
+    public InventorySlot[] slots;
+    public InventorySlot[] Eq_Slots;
+
+    // 캐릭터 원본 이미지를 저장할 배열
+    public Sprite[] character_Images;
+
+    // 플레이어가 소지한 아이템 리스트
+    private List<Item> inventoryItemList;
+    // 선택한 탭에 따라 다르게 보여질 아이템 리스트
+    private List<Item> inventoryTabList;
+    // 플레이어가 장착한 아이템 리스트
+    public List<Item> EquipmentItemList;
+
+    public GameObject item_panel;
+    public GameObject equip_panel;
+
+    // 캐릭터 초상화
+    public Image character_Portrait;
+
+    // 부연 설명
+    public Text Description_Text;
+    public Text EQ_Description_Text;
+
+    // 탭 부연 설명
+    public string[] tabDesecription;
+
+    // slot 부모 객체
+    public Transform tf;
+    public Transform tf_1;
+
+    public GameObject[] selectedTabImage;
+
+    private GameObject[] selectedItemImage;
+
+    public GameObject[] selectedEquipImage;
+
+    private GameObject[] itemArray;
+
+    private Equipment theEquip;
+
+    // 선택된 아이템
+    private int selectedItem = 0;
+    // 선택된 탭
+    private int selectedTab = 0;  //0 장비   1 소비   2 ETC
+    // 선택된 장착 아이템
+    private int selectedEquipItem = 0;
+
+    private const int WEAPON = 0, ARMOR = 1, LEFT_ACCESSORY = 2, RIGHT_ACCESSORY = 3;
+    // 장비 아이콘
+    //public Image[] equip_icon;
+    // 장착된 장비 리스트
+    public Item[] equipItemList;
+
+    private int character_num = 8;
+
+    private int character_index = 0;
+
+    public Image itemImage;
+    public Image Equip_itemImage;
+
+    public Text item_name;
+    public Text Equip_item_name;
+
+    public GameObject obj;
+
+    TitleButton title;
+
+
+    private WaitForSeconds waitTime = new WaitForSeconds(0.01f);
+
+    public void RemoveSlot()
+    {
+        for (int i = 0; i < slots.Length; i++)
+        {
+            slots[i].RemoveItem();
+            slots[i].gameObject.SetActive(false);
+        }
+    }   // 인벤토리 슬롯 초기화
+
+    public void EquipRemoveSlot()
+    {
+        for (int i = 0; i < Eq_Slots.Length; i++)
+        {
+            Eq_Slots[i].RemoveItem();
+            Eq_Slots[i].gameObject.SetActive(false);
+        }
+    }   // 인벤토리 슬롯 초기화
+
+    public void SelectedItem(int index)
+    {
+        if (inventoryTabList.Count > 0)
+        {
+           Description_Text.text = inventoryTabList[index].itemDescription;
+           itemImage.sprite = inventoryTabList[index].itemIcon;
+           item_name.text = inventoryTabList[index].itemName;
+
+        }
+    }   // 선택된 아이템을 제외하고, 다른 모든 탭의 컬러 알파값을 0으로 조정
+
+    public void SelectedEquipItemp(int index)
+    {
+        if(EquipmentItemList.Count > 0)
+        {
+           EQ_Description_Text.text = EquipmentItemList[index].itemDescription;
+           Equip_itemImage.sprite = EquipmentItemList[index].itemIcon;
+           Equip_item_name.text = EquipmentItemList[index].itemName;
+        }
+    }
+
+    public void ShowItem()
+    {
+        inventoryTabList.Clear();
+        RemoveSlot();
+        switch (selectedTab)
+        {
+            case 0:
+                for (int i = 0; i < inventoryItemList.Count; i++)
+                {
+                    if (Item.ItemType.Equip == inventoryItemList[i].itemType)
+                        inventoryTabList.Add(inventoryItemList[i]);
+                }
+                break;
+            case 1:
+                for (int i = 0; i < inventoryItemList.Count; i++)
+                {
+                    if (Item.ItemType.Use == inventoryItemList[i].itemType)
+                        inventoryTabList.Add(inventoryItemList[i]);
+                }
+                break;
+            case 2:
+                for (int i = 0; i < inventoryItemList.Count; i++)
+                {
+                    if (Item.ItemType.ETC == inventoryItemList[i].itemType)
+                        inventoryTabList.Add(inventoryItemList[i]);
+                }
+                break;
+            default:
+                break;
+        }  // 탭에 따른 아이템 분류, 그것을 인벤토리 탭 리스트에 추가
+
+        for (int i = 0; i < inventoryTabList.Count; i++)
+        {
+            //Debug.Log(inventoryTabList[i].itemName);
+            slots[i].gameObject.SetActive(true);
+            slots[i].AddItem(inventoryTabList[i]);
+        }   // 인벤토리 탭 리스트의 내용을, 인벤토리 슬롯에 추가
+
+    }       // 아이템 활성화
+
+
+    public void GetCharacterIndex(int index)
+    {
+        character_index = index;
+        character_Portrait.sprite = character_Images[character_index];
+        switch (character_index)
+        {
+            case 0:
+                EquipmentItemList = DatabaseManager.instance.equipList0;
+                break;
+            case 1:
+                EquipmentItemList = DatabaseManager.instance.equipList1;
+                break;
+            case 2:
+                EquipmentItemList = DatabaseManager.instance.equipList2;
+                break;
+            case 3:
+                EquipmentItemList = DatabaseManager.instance.equipList0;
+                break;
+            case 4:
+                EquipmentItemList = DatabaseManager.instance.equipList4;
+                break;
+            case 5:
+                EquipmentItemList = DatabaseManager.instance.equipList5;
+                break;
+            case 6:
+                EquipmentItemList = DatabaseManager.instance.equipList6;
+                break;
+            case 7:
+                EquipmentItemList = DatabaseManager.instance.equipList7;
+                break;
+            default:
+                break;
+        }
+    }
+
+    public void GetItemIndex(int index)
+    {
+
+        StopAllCoroutines();
+        selectedItem = index;
+        Color color = slots[0].selected_Item.GetComponent<Image>().color;
+        color.a = 0.2f;
+        for (int i = 0; i < slots.Length; i++)
+        {
+            slots[i].selected_Item.GetComponent<Image>().color = color;
+        }
+        item_panel.SetActive(true);
+        equip_panel.SetActive(false);
+        SelectedItem(selectedItem);
+        StartCoroutine(SelectedItemEffect(selectedItem));
+    }
+
+    public void GetEquipIndex(int index)
+    {
+        StopAllCoroutines();
+        selectedEquipItem = index;
+
+        Color color = Eq_Slots[0].selected_Item.GetComponent<Image>().color;
+        color.a = 0.2f;
+        for (int i = 0; i < Eq_Slots.Length; i++)
+        {
+            Eq_Slots[i].selected_Item.GetComponent<Image>().color = color;
+        }
+        item_panel.SetActive(false);
+        equip_panel.SetActive(true);
+        SelectedEquipItemp(selectedEquipItem);
+        StartCoroutine(SelectedEquipEffect(selectedEquipItem));
+    }
+
+
+    public void GetTabIndex(int index)
+    {
+        StopAllCoroutines();
+        selectedTab = index;
+        Color color = selectedTabImage[selectedTab].GetComponent<Image>().color;
+        color.a = 0f;
+        for (int i = 0; i < selectedTabImage.Length; i++)
+        {
+            selectedTabImage[i].GetComponent<Image>().color = color;
+        }
+
+        StartCoroutine(SelectedTabEffect(selectedTab));
+    }
+
+    public void EquipToInventory(Item _item)
+    {
+        inventoryItemList.Add(_item);
+    }
+
+    public void ShowEquipItem()
+    {
+        EquipRemoveSlot();
+        for (int i = 0; i < EquipmentItemList.Count; i++)
+        {
+            Debug.Log(Equip_item_name.text);
+
+            Eq_Slots[i].gameObject.SetActive(true);
+            Eq_Slots[i].AddItem(EquipmentItemList[i]);
+        }   // 인벤토리 탭 리스트의 내용을, 인벤토리 슬롯에 추가
+    }
+
+
+    IEnumerator SelectedTabEffect(int index)
+    {
+        while (true)
+        {
+            Color color = selectedTabImage[index].GetComponent<Image>().color;
+            while (color.a < 0.5)
+            {
+                color.a += 0.03f;
+                selectedTabImage[index].GetComponent<Image>().color = color;
+                yield return waitTime;
+            }
+            while (color.a > 0f)
+            {
+                color.a -= 0.03f;
+                selectedTabImage[index].GetComponent<Image>().color = color;
+                yield return waitTime;
+            }
+
+            yield return new WaitForSeconds(0.3f);
+        }
+    }
+
+    IEnumerator SelectedItemEffect(int index)
+    {
+        while (true)
+        {
+            Color color = selectedItemImage[index].GetComponent<Image>().color;
+            while (color.a < 0.5)
+            {
+                color.a += 0.02f;
+                selectedItemImage[index].GetComponent<Image>().color = color;
+                yield return waitTime;
+            }
+            while (color.a > 0f)
+            {
+                color.a -= 0.02f;
+                selectedItemImage[index].GetComponent<Image>().color = color;
+                yield return waitTime;
+            }
+
+            yield return new WaitForSeconds(0.3f);
+
+        }
+    }
+
+    IEnumerator SelectedEquipEffect(int index)
+    {
+
+        while (true)
+        {
+            Color color = selectedEquipImage[index].GetComponent<Image>().color;
+            while (color.a < 0.5)
+            {
+                color.a += 0.03f;
+                selectedEquipImage[index].GetComponent<Image>().color = color;
+                yield return waitTime;
+            }
+            while (color.a > 0f)
+            {
+                color.a -= 0.03f;
+                selectedEquipImage[index].GetComponent<Image>().color = color;
+                yield return waitTime;
+            }
+
+            yield return new WaitForSeconds(0.3f);
+
+        }
+    }
+
+
+    private void Start()
+    {
+        character_Images = new Sprite[character_num];
+        title = obj.GetComponent<TitleButton>();
+        character_Images = title.character_image;
+        inventoryItemList = new List<Item>();
+        inventoryTabList = new List<Item>();
+        EquipmentItemList = new List<Item>();
+        slots = tf.GetComponentsInChildren<InventorySlot>();
+        Eq_Slots = tf_1.GetComponentsInChildren<InventorySlot>();
+        selectedItemImage = new GameObject[slots.Length];
+        theEquip = FindObjectOfType<Equipment>();
+        for (int i = 0; i < slots.Length; i++)
+        {
+            selectedItemImage[i] = slots[i].selected_Item;
+        }
+        inventoryItemList = DatabaseManager.instance.itemList;
+        item_panel.SetActive(false);
+        equip_panel.SetActive(false);
+
+    }
+
+    private void Update()
+    {
+        ShowItem();
+        ShowEquipItem();
+        character_Portrait.sprite = character_Images[character_index];
+
+    }
+
+    public void EquipItem()
+    {
+        for (int i = 0; i < inventoryItemList.Count; i++)
+        {
+            if (inventoryItemList[i].itemID == inventoryTabList[selectedItem].itemID)
+            {
+                if (selectedTab == 0) //장비창이면
+                {
+                    theEquip.EquipItem(inventoryItemList[i]);
+                    inventoryItemList.RemoveAt(i);
+                    ShowItem();
+                    break;
+                }
+            }
+        }
+    }
+
+}
+

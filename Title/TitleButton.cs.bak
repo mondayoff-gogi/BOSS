@@ -1,0 +1,817 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.SceneManagement;
+
+public class TitleButton : MonoBehaviour
+{
+    // 타이틀에서 보스 선택창으로 넘어가는 애니메이션
+    public Sprite[] _ani_title_to_boss;
+    public Sprite[] _ani_title_to_info;
+    // 캔버스를 관리할 배열
+    public Canvas[] canvas;
+
+    // 캔버스의 버튼들을 관리할 배열
+    public Image[] boss_Buttons;
+    public Image[] character_Buttons;
+
+    // 캔버스 인덱스
+    private int canvas_index = 0;
+
+    // 타이들 배경화면
+    private Image title_image;
+    // 보스 선택 배경화면
+    private Image boss_select_image;
+    private Image info_image;
+
+    // 타이틀의 버튼을 관리할 배열
+    private Button[] title_buttons;
+    public GameObject title_title;
+    // 보스 선택 캔버스의 버튼을 관리할 배열
+    private Button[] boss_selection_buttons;
+    public GameObject boss_title;
+    // 캐릭터 선택 캔버스의 버튼을 관리할 배열
+    private Button[] character_selection_buttons;
+    public GameObject character_title;
+
+    // 인벤토리 캔버스의 버튼을 관리할 배열
+    private Button[] inventory_Buttons;
+    // 도감 선택 캔버스의 버튼을 관리할 배열
+    private Button[] info_buttons;
+    // 옵션 캔버스의 버튼을 관리할 배열
+    private Button option_button;
+    // 타이틀 버튼 이미지
+    public Image[] title_buttons_image;
+
+    // 8개의 보스 애니메이션을 보관하는 배열
+    private Animator[] boss_animator;
+    // 8개의 캐릭터 애니메이션을 보관하는 배열
+    private Animator[] character_animator;
+
+    //8개의 보스 난이도를 보관하는 배열
+    //public GameObject[] boss_level;
+
+    // 보스 인덱스
+    private int boss_index = 9;
+    // 보스가 선택됬는지 알 수 있는 불리언 배열
+    public bool[] boss_is_selected;
+
+    private int temp = 0;
+
+    // 첫 보스의 이미지들을 보관하는 배열
+    private Sprite[] boss_image;
+    // 첫 캐릭터들의 이미지를 보관하는 배열
+    public Sprite[] character_image;
+
+    // 버튼 누르는 시간을 재는 변수
+    private float pressing_Time = 0;
+    // 버튼이 눌린것을 확인하는 변수
+    private bool is_Pressed = false;
+    public bool IsLevelSelect = false;
+    //// 캐릭터 인덱스
+    private int[] character_index;
+    private bool[] character_is_selected;
+
+    public GameObject warning_panel1;
+    public GameObject warning_panel2;
+
+    public GameObject fade_out;
+
+    public LevelSelect level_select;
+
+    public Slider[] _sliders;
+
+    public GameObject[] level;
+
+    private float max_item_count;
+
+    public GameObject warning_pannel;
+    private Text warning_text;
+
+    private MoveTip boss_tip;
+    private MoveTip character_tip;
+
+    public Image[] character_backGround;
+
+    private void Start()
+    {
+        boss_animator = new Animator[boss_Buttons.Length];
+        boss_is_selected = new bool[boss_Buttons.Length];
+        boss_selection_buttons = canvas[1].GetComponentsInChildren<Button>();
+        boss_select_image = canvas[1].GetComponentInChildren<Image>();
+        boss_image = new Sprite[boss_Buttons.Length];
+        boss_tip = canvas[1].GetComponentInChildren<MoveTip>();
+        character_index = new int[2];
+        character_is_selected = new bool[character_Buttons.Length];
+        character_image = new Sprite[character_Buttons.Length];
+        character_selection_buttons = canvas[2].GetComponentsInChildren<Button>();
+        character_animator = new Animator[character_Buttons.Length];
+        character_tip = canvas[2].GetComponentInChildren<MoveTip>();
+        max_item_count = DatabaseManager.instance.max_item_count;
+        title_buttons = canvas[0].GetComponentsInChildren<Button>();
+        title_image = canvas[0].GetComponentInChildren<Image>();
+        inventory_Buttons = canvas[3].GetComponentsInChildren<Button>();
+        info_image = canvas[4].GetComponentInChildren<Image>();
+        info_buttons = canvas[4].GetComponentsInChildren<Button>();
+        option_button = canvas[5].GetComponentInChildren<Button>();
+        warning_text = warning_pannel.GetComponentInChildren<Text>();
+        // 캔버스 초기화
+        for (int i = 1; i < canvas.Length; i++)
+        {
+            canvas[i].enabled = false;
+        }
+
+        // 보스 버튼과 캐릭터 버튼 초기화
+        for (int i = 0; i < boss_selection_buttons.Length; i++)
+        {
+            boss_selection_buttons[i].gameObject.SetActive(false);
+            character_selection_buttons[i].gameObject.SetActive(false);
+        }
+
+        for (int i = 0; i < inventory_Buttons.Length; i++)
+        {
+            inventory_Buttons[i].enabled = false;
+        }
+
+        // 나머지 초기화
+        for (int i = 0; i < boss_Buttons.Length; i++)
+        {
+            boss_animator[i] = boss_Buttons[i].GetComponentInChildren<Animator>();
+            boss_animator[i].enabled = false;
+            //boss_level[i].SetActive(false);
+
+            boss_is_selected[i] = false;
+            boss_image[i] = boss_Buttons[i].GetComponentInChildren<Image>().sprite;
+        }
+
+        for (int i = 0; i < character_Buttons.Length; i++)
+        {
+            character_animator[i] = character_Buttons[i].GetComponent<Animator>();
+            character_animator[i].enabled = false;
+            character_is_selected[i] = false;
+            character_image[i] = character_Buttons[i].GetComponent<Image>().sprite;
+        }
+
+
+        // 캐릭터 인덱스 초기화
+        for (int i = 0; i < character_index.Length; i++)
+        {
+            character_index[i] = 9;
+        }
+        SetDeActivateInfoButtons();
+
+        if (title_buttons[0].IsActive() == false)
+        {
+            SetDeActivateTitleButtons();
+        }
+        BGMManager.instance.Play(0);
+    }
+
+    private void Update()
+    {
+        if (is_Pressed)
+        {
+            pressing_Time += Time.deltaTime;
+            if (pressing_Time >= 1f)
+            {
+                StartCoroutine(CharacterToInventory());
+            }
+        }
+    }
+
+    public void StartGame()
+    {
+        SoundManager.instance.Play(34);
+
+        SetDeActivateTitleButtons();
+
+        StartCoroutine(TitleToBoss(0.1f));
+    }
+
+    public void GoToInfo()
+    {
+        SoundManager.instance.Play(34);
+        SetActivateInfoButtons();
+
+        StartCoroutine(TitleToInfo(0.1f));
+    }
+
+    public void InfoToTitle()
+    {
+        SoundManager.instance.Play(35);
+        SetDeActivateInfoButtons();
+        SetDeActivateTitleButtons();
+
+        StartCoroutine(InfoToTitle(0.1f));
+    }
+
+    public void BackToTitleButton()
+    {
+        SoundManager.instance.Play(35);
+        SetDeActivateBossButtons();
+
+        StartCoroutine(BossToTitle(0.1f));
+    }
+
+    public void BossToCharacterButton()
+    {
+        StartCoroutine(BossToCharacter());
+    }
+
+    public void CharacterToBossButton()
+    {
+        SoundManager.instance.Play(35);        
+        
+        SetDeActivateCharacterButtons();
+
+        StartCoroutine(CharacterToBoss());
+    }
+
+    public void InventoryToCharacterButton()
+    {
+        SoundManager.instance.Play(35);
+
+        SetDeActivateInventoryButtons();
+        StartCoroutine(InventoryToCharacter());
+    }
+
+    public void CharacterToBattle()
+    {
+        StartCoroutine(GoToNextScene());
+    }
+
+    public void TitleToOption()
+    {
+        SoundManager.instance.Play(34);
+
+        SetActivateOptionButtons();
+        StartCoroutine(GoToOption(0.1f));
+    }
+
+    public void OptionToTitle()
+    {
+        SoundManager.instance.Play(35);
+
+        SetDeActivateOptionButtons();
+        StartCoroutine(OptionToTitle(0.1f));
+    }
+
+    public void StartBossAnimation()
+    {
+        SoundManager.instance.Play(38);
+
+        IsLevelSelect = false;
+        for (int i = 0; i < boss_animator.Length; i++)
+        {
+            if (boss_is_selected[i])
+            {
+                boss_animator[i].enabled = true;
+                //boss_level[i].SetActive(true);
+
+            }
+            else
+            {
+                boss_animator[i].enabled = false;
+                //boss_level[i].SetActive(false);
+                boss_Buttons[i].sprite = boss_image[i];
+
+            }
+        }
+    }
+
+    public void StartCharacterAnimation()
+    {
+        SoundManager.instance.Play(38);
+
+
+        for (int i = 0; i < character_is_selected.Length; i++)
+        {
+            if (character_is_selected[i])
+            {
+                character_animator[i].enabled = true;
+                character_backGround[i].GetComponent<Image>().color = new Color(1f,0.5f,0f,1f);
+            }
+            else
+            {
+                character_animator[i].enabled = false;
+                character_Buttons[i].GetComponent<Image>().sprite = character_image[i];
+                character_backGround[i].GetComponent<Image>().color = new Color(1f,1f,1f,1f);
+
+            }
+        }
+    }
+
+    public void GetBossIndex(int index)
+    {
+        boss_is_selected[index] = !boss_is_selected[index];
+        for (int i = 0; i < boss_is_selected.Length; i++)
+        {
+            if (i != index)
+            {                
+                boss_is_selected[i] = false;
+            }
+
+        }
+        boss_index = index;
+    }
+
+
+    public void GetCharaterIndex(int index)
+    {
+        // 캐릭터 2개 모두 안 골랐을 경우
+        if (character_index[0] == 9 && character_index[1] == 9)
+        {
+            // 1번 캐릭터에 할당
+            character_index[0] = index;
+            character_is_selected[character_index[0]] = !character_is_selected[character_index[0]];
+            return;
+        }
+        // 캐릭터 1개만 골라졌을 경우에서 다시 같은 캐릭터를 고른 경우
+        else if (character_index[0] < 9 && character_index[1] == 9 && character_index[0] == index)
+        {
+            // 1번 캐릭터 취소
+            character_is_selected[character_index[0]] = !character_is_selected[character_index[0]];
+            character_index[0] = 9;
+            return;
+        }
+        // 캐릭터 1개만 골렸을 경우에서 다른 캐릭터를 고른 경우
+        else if (character_index[0] < 9 && character_index[1] == 9)
+        {
+            // 2번 캐릭터를 할당
+            character_index[1] = index;
+            character_is_selected[character_index[1]] = !character_is_selected[character_index[1]];
+            return;
+        }
+
+        // 캐릭터 2개를 모두 고른 상태에서 1번 캐릭터를 다시 고른 경우
+        else if (character_index[0] < 9 && character_index[1] < 9 && character_index[0] == index)
+        {
+            // 2번 캐릭터를 1번 캐릭터로 옮겨 할당하고
+            character_is_selected[character_index[0]] = !character_is_selected[character_index[0]];
+            character_index[0] = character_index[1];
+            character_is_selected[character_index[0]] = !character_is_selected[character_index[0]];
+
+            // 2번 캐릭터를 취소
+            character_is_selected[character_index[1]] = !character_is_selected[character_index[1]];
+            character_index[1] = 9;
+
+            return;
+        }
+
+        // 캐릭터 2개를 모두 고른 상태에서 2번 캐릭터를 다시 고른 경우
+        else if (character_index[0] < 9 && character_index[1] < 9 && character_index[1] == index)
+        {
+            // 2번 캐릭터를 취소
+            character_is_selected[character_index[1]] = !character_is_selected[character_index[1]];
+            character_index[1] = 9;
+            return;
+        }
+
+        // 캐릭터 2개를 모두 고른 상태에서 제 3의 캐릭터를 고른 경우
+        else if (character_index[0] < 9 && character_index[0] < 9 && character_index[1] < 9 && character_index[0] != index && character_index[1] != index)
+        {
+            character_is_selected[character_index[0]] = !character_is_selected[character_index[0]];
+            character_index[0] = character_index[1];
+            character_is_selected[character_index[1]] = !character_is_selected[character_index[1]];
+
+            character_is_selected[character_index[0]] = !character_is_selected[character_index[0]];
+
+            character_index[1] = index;
+            character_is_selected[character_index[1]] = !character_is_selected[character_index[1]];
+            return;
+        }
+
+    }
+
+    IEnumerator TitleToBoss(float speed)
+    {
+        temp = canvas_index;
+        for (int i = 0; i < _ani_title_to_boss.Length; i++)
+        {
+            title_image.sprite = _ani_title_to_boss[i];
+            yield return new WaitForSeconds(speed);
+        }
+        InitializeBool();
+        title_image.sprite = _ani_title_to_boss[0];
+
+        canvas[temp].enabled = false;
+        temp += 1;
+        // 캔버스 이미지 초기화
+        SetActivateBossButtons();
+        boss_tip.enabled = true;
+        canvas[temp].enabled = true;
+        canvas_index = temp;
+    }
+
+    IEnumerator TitleToInfo(float speed)
+    {
+        temp = canvas_index;
+        for (int i = 0; i < _ani_title_to_info.Length; i++)
+        {
+            title_image.sprite = _ani_title_to_info[i];
+            yield return new WaitForSeconds(speed);
+        }
+        title_image.sprite = _ani_title_to_boss[0];
+        canvas[temp].enabled = false;
+        SetDeActivateTitleButtons();
+        temp = 4;
+        canvas[temp].enabled = true;
+        canvas[temp].GetComponent<Information>().InitializeObjects();
+        canvas_index = temp;
+    }
+
+    IEnumerator GoToOption(float speed)
+    {
+        temp = canvas_index;
+        for (int i = 0; i < _ani_title_to_info.Length; i++)
+        {
+            title_image.sprite = _ani_title_to_info[i];
+            yield return new WaitForSeconds(speed);
+        }
+        title_image.sprite = _ani_title_to_boss[0];
+        canvas[temp].enabled = false;
+        SetDeActivateTitleButtons();
+        temp = 5;
+        canvas[temp].enabled = true;
+        canvas_index = temp;
+
+    }
+
+    IEnumerator InfoToTitle(float speed)
+    {
+        SetActivateTitleButtons();
+        canvas[4].GetComponent<Information>().InitializeObjects();
+        temp = canvas_index;
+        canvas[temp].enabled = false;
+        temp = 0;
+        canvas[temp].enabled = true;
+        canvas_index = temp;
+        yield return 0;
+    }
+
+    IEnumerator OptionToTitle(float speed)
+    {
+        SetActivateTitleButtons();
+        temp = canvas_index;
+        canvas[temp].enabled = false;
+        temp = 0;
+        canvas[temp].enabled = true;
+        canvas_index = temp;
+        yield return 0;
+    }
+
+    IEnumerator BossToTitle(float speed)
+    {
+        temp = canvas_index;
+
+
+        for (int i = 0; i < boss_Buttons.Length; i++)
+        {
+            // 보스 애니메이션 끄기
+            boss_animator[i].enabled = false;
+            //boss_level[i].SetActive(false);
+            boss_is_selected[i] = false;
+
+            // 보스 이미지 초기화
+        }
+        if (boss_index < 8)
+            boss_Buttons[boss_index].sprite = boss_image[boss_index];
+        else
+            yield return 0;
+        // 클릭 확인 배열 초기화
+        InitializeBool();
+        for (int i = _ani_title_to_boss.Length - 1; i >= 0; --i)
+        {
+            yield return new WaitForSeconds(speed);
+            boss_select_image.sprite = _ani_title_to_boss[i];
+        }
+        canvas[temp].enabled = false;
+        // 캔버스 이미지 초기화
+        boss_select_image.sprite = _ani_title_to_boss[_ani_title_to_boss.Length - 1];
+        temp -= 1;
+        canvas[temp].enabled = true;
+        level_select.ResetButtons();
+        SetActivateTitleButtons();
+        canvas_index = temp;
+        boss_tip.StopMove();
+        boss_tip.enabled = false;
+
+        boss_index = 9;
+    }
+
+    // 나중에 책장 넘기는 이펙트 넣어 줄것
+    IEnumerator BossToCharacter()
+    {
+
+        temp = canvas_index;
+        int is_selected = 0;
+        for (int i = 0; i < boss_is_selected.Length; i++)
+        {
+            if (boss_is_selected[i])
+            {
+                is_selected++;
+            }
+        }
+
+        if (is_selected == 1 && IsLevelSelect)  // 보스와 레벨이 선택 되었을때
+        {
+            SoundManager.instance.Play(34);
+
+            IsLevelSelect = false;
+            canvas[temp].enabled = false;
+            temp += 1;
+            canvas[temp].enabled = true;
+            if (boss_index < 8)
+                boss_Buttons[boss_index].sprite = boss_image[boss_index];
+            else
+                yield return 0;
+            boss_animator[boss_index].enabled = false;
+            //boss_level[boss_index].SetActive(false);
+            SetDeActivateBossButtons();
+            SetActivateCharacterButtons();
+            canvas_index = temp;
+            boss_tip.enabled = false;
+            boss_tip.StopMove();
+
+            character_tip.enabled = true;
+            
+            yield return new WaitForSeconds(0);
+        }
+        else if(is_selected == 1 && !IsLevelSelect)
+        {
+            SoundManager.instance.Play(36);
+
+            warning_panel1.SetActive(true);
+            warning_panel1.GetComponentInChildren<Text>().text = "난이도를 선택해주세요.";
+        }
+        else
+        {
+            SoundManager.instance.Play(36);
+
+            warning_panel1.SetActive(true);
+            warning_panel1.GetComponentInChildren<Text>().text = "보스를 선택해 주세요.";
+        }
+    
+    }
+
+    IEnumerator CharacterToBoss()
+    {
+        temp = canvas_index;
+        //// 캐릭터 인덱스 초기화
+        //first_character_index = 0;
+        //second_character_index = 0;
+        canvas[temp].enabled = false;
+        temp -= 1;
+        canvas[temp].enabled = true;
+        for (int i = 0; i < character_is_selected.Length; i++)
+        {
+            if (character_is_selected[i])
+            {
+                character_is_selected[i] = false;
+                character_animator[i].enabled = false;
+                character_Buttons[i].GetComponent<Image>().sprite = character_image[i];
+            }
+        }
+        for(int i = 0; i < character_index.Length; i++)
+        {
+            character_index[i] = 9;
+        }
+
+        for(int i = 0; i < boss_is_selected.Length; i++)
+        {
+            boss_is_selected[i] = false;
+        }
+        SetDeActivateCharacterButtons();
+
+        SetActivateBossButtons();
+
+        canvas_index = temp;
+        level_select.ResetButtons();
+        character_tip.StopMove();
+        character_tip.enabled = false;
+
+        yield return new WaitForSeconds(0);
+    }
+
+    IEnumerator GoToNextScene()
+    {
+        int is_Selected = 0;
+        for (int i = 0; i < character_is_selected.Length; i++)
+        {
+            if (character_is_selected[i])
+                is_Selected++;
+        }
+        if (is_Selected == 2)
+        {
+            if(DatabaseManager.instance.itemList.Count == max_item_count)
+            {
+                warning_text.text = "아이템 소지 개수가 아이템 소지 한도를 넘어서 더 이상 아이템을 획득 할 수 없습니다.\n 계속 하시겠습니까?";
+                warning_pannel.SetActive(true);
+                yield return 0;
+            }
+            else
+            {
+                NextScene();
+            }
+        }
+        else
+        {
+            SoundManager.instance.Play(36);
+
+            warning_panel2.SetActive(true);
+            yield return 0;
+
+        }
+
+    }
+
+    IEnumerator CharacterToInventory()
+    {
+        SoundManager.instance.Play(34);
+
+        SetDeActivateCharacterButtons();
+        SetDeActivateInventoryButtons();
+        temp = canvas_index;
+        canvas[temp].enabled = false;
+        temp += 1;
+        canvas[temp].enabled = true;
+        canvas_index = temp;
+        is_Pressed = false;
+        pressing_Time = 0;
+        yield return new WaitForSeconds(0);
+
+    }
+
+    IEnumerator InventoryToCharacter()
+    {
+        SetDeActivateCharacterButtons();
+        temp = canvas_index;
+        canvas[temp].enabled = false;
+        temp -= 1;
+        canvas[temp].enabled = true;
+        canvas_index = temp;
+        SetActivateCharacterButtons();
+        yield return new WaitForSeconds(0);
+
+    }
+
+    private void InitializeBool()
+    {
+        for (int i = 0; i < boss_is_selected.Length; i++)
+        {
+            boss_is_selected[i] = false;
+        }
+    }
+    private void SetActivateTitleButtons()
+    {
+        title_title.SetActive(true);
+        for (int i = 0; i < title_buttons.Length; i++)
+        {
+            title_buttons[i].gameObject.SetActive(true);
+        }
+    }
+
+    private void SetDeActivateTitleButtons()
+    {
+        title_title.SetActive(false);
+
+        for (int i = 0; i < title_buttons.Length; i++)
+        {
+            title_buttons[i].gameObject.SetActive(false);
+        }
+    }
+
+    private void SetActivateBossButtons()
+    {
+        boss_title.SetActive(true);
+        for (int i = 0; i < boss_selection_buttons.Length; i++)
+        {
+            boss_selection_buttons[i].gameObject.SetActive(true);
+        }
+       
+    }
+
+    private void SetDeActivateBossButtons()
+    {
+        boss_title.SetActive(false);
+       
+        for (int i = 0; i < boss_selection_buttons.Length; i++)
+        {
+            boss_selection_buttons[i].gameObject.SetActive(false);
+        }
+
+    }
+
+    private void SetActivateCharacterButtons()
+    {
+        character_title.SetActive(true);
+        for (int i = 0; i < character_selection_buttons.Length; i++)
+        {
+            character_selection_buttons[i].gameObject.SetActive(true);
+
+        }
+    }
+
+    private void SetDeActivateCharacterButtons()
+    {
+        character_title.SetActive(false);
+        for (int i = 0; i < character_selection_buttons.Length; i++)
+        {
+            character_selection_buttons[i].gameObject.SetActive(false);
+
+        }
+    }
+
+    private void SetDeActivateInventoryButtons()
+    {
+        for (int i = 0; i < inventory_Buttons.Length; i++)
+        {
+            inventory_Buttons[i].enabled = !inventory_Buttons[i].IsActive();
+        }
+    }
+
+    private void SetDeActivateInfoButtons()
+    {
+        for (int i = 0; i < info_buttons.Length; i++)
+        {
+            info_buttons[i].enabled = false;
+        }
+    }
+    private void SetActivateInfoButtons()
+    {
+        for (int i = 0; i < info_buttons.Length; i++)
+        {
+            info_buttons[i].enabled = true;
+        }
+    }
+    private void SetActivateOptionButtons()
+    {
+        option_button.gameObject.SetActive(true);
+        for (int i = 0; i < _sliders.Length; i++)
+        {
+            _sliders[i].gameObject.SetActive(true);
+        }
+    }
+
+    private void SetDeActivateOptionButtons()
+    {
+        option_button.gameObject.SetActive(false);
+
+        for (int i = 0; i < _sliders.Length; i++)
+        {
+            _sliders[i].gameObject.SetActive(false);
+        }
+    }
+
+    public void ButtonPressed()
+    {
+        is_Pressed = true;
+    }
+
+    public void ButtonReleased()
+    {
+        pressing_Time = 0;
+        is_Pressed = false;
+    }
+
+    public void QuitGame()
+    {
+        Application.Quit();
+    }
+
+    public void CloseBossWarning()
+    {
+        warning_panel1.SetActive(false);
+    }
+
+    public void CloseCharacterWarning()
+    {
+        warning_panel2.SetActive(false);
+    }
+
+    public void NextScene()
+    {
+        StartCoroutine(OKNextScene());
+    }
+
+    public void Cancel()
+    {
+        warning_pannel.SetActive(false);
+    }
+
+    IEnumerator OKNextScene()
+    {
+        SoundManager.instance.Play(34);
+
+        canvas_index = 0;
+        UpLoadData.boss_index = this.boss_index;
+        UpLoadData.character_index = this.character_index;
+        fade_out.GetComponent<Canvas>().sortingLayerName = "BackGround";
+        fade_out.GetComponentInChildren<FadeOut>().enabled = true;
+        yield return new WaitForSeconds(1f);
+        SceneManager.LoadScene("Loading");
+        SetDeActivateTitleButtons();
+        yield return 0;
+    }
+}

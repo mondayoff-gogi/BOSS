@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: f34253ff491cc784789d605cff767f94
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - target_player: {instanceID: 0}
+  - Angry_Effect: {fileID: 4926815973320049964, guid: eed787199f3b6e047a29c3ce40791454,
+      type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

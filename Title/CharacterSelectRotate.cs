@@ -1,0 +1,453 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+
+public class CharacterSelectRotate : MonoBehaviour
+{
+    public GameObject[] CharacterSprite;
+    public GameObject[] CharacterSprite_2;
+
+    public TitleButton _title;
+
+    public Image out_line1;
+    public Image out_line2;
+    public Image next_icon;
+    public GameObject[] character_footholds;
+    public Material shiny;
+    private Material default_matarial;
+
+    private Vector3 pos;
+    private const float Distance = 3f;
+    private const float Y_Size = 0.4f;
+    private const float X_Duplicate= 4f;
+    private Vector2 Post_pos;
+    private Vector2 Cur_pos;
+    private Vector2 Post_pos_2;
+    private Vector2 Cur_pos_2;
+
+    private Vector2 Save_pos;
+    private Vector2 Moving_pos;
+    private float Move_distance;
+    private Vector2 Save_pos_2;
+    private Vector2 Moving_pos_2;
+    private float Move_distance_2;
+    private const float MoveSpeed = 0.5f;
+    private float[] RotateSave;
+    private float[] RotateSave_2;
+
+    private bool is_Swape;
+    private bool Is_Adjust;
+    private bool is_Swape_2;
+    private bool Is_Adjust_2;
+    private float power;
+    private float power_2;
+    private bool is_touching_layer = false;
+    private Vector2 _pos_ray;
+
+    private bool is_Right;
+    private bool is_Left;
+
+    private int count;
+    private Vector2[] Post_count;
+
+    private int count_2;
+    private Vector2[] Post_count_2;
+
+    private Vector3 moveposition;
+    private float temp;
+    private Vector3 startposition;
+    private bool is_click = false;
+
+    // Start is called before the first frame update
+    void Start()
+    {
+        default_matarial = character_footholds[0].GetComponent<SpriteRenderer>().material;
+        SetDefault();
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        if (Camera.main.GetComponent<TitleButton>().warning_panel2.activeSelf || Camera.main.GetComponent<TitleButton>().fade_out.activeSelf)
+            return;
+
+        if (Input.GetMouseButtonDown(0)&& Camera.main.ScreenToWorldPoint(Input.mousePosition).x<0) //누르는 순간 왼쪽
+        {
+
+            is_Left = true;
+            is_click = true;
+            _pos_ray = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+            if (Physics2D.Raycast(_pos_ray, Vector2.zero, 1000, 1 << 26))
+            {
+                is_touching_layer = true;
+                return;
+            }
+
+
+            is_Swape = false;
+            Is_Adjust = false;
+            count = 0;
+            out_line1.GetComponent<Image>().color = Color.black;
+            Save_pos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+
+            for (int i = 0; i < Post_count.Length; i++)
+            {
+                Post_count[i] = Save_pos;
+            }
+            for (int i = 0; i < CharacterSprite.Length; i++)
+            {
+                CharacterSprite[i].GetComponentInChildren<Animator>().enabled = false;
+                CharacterSprite[i].GetComponentInChildren<Image>().color = new Color(0.2f,0.2f,0.2f,1f); 
+            }
+            character_footholds[0].GetComponent<SpriteRenderer>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
+            character_footholds[0].GetComponent<SpriteRenderer>().material = default_matarial;
+        }
+        else if (Input.GetMouseButtonDown(0) && Camera.main.ScreenToWorldPoint(Input.mousePosition).x >=0) //누르는 순간 오른쪽
+        {
+            is_Right = true;
+            is_click = true;
+
+            _pos_ray = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+            if (Physics2D.Raycast(_pos_ray, Vector2.zero, 1000, 1 << 26))
+            {
+                is_touching_layer = true;
+                return;
+            }
+
+
+            is_Swape_2 = false;
+            Is_Adjust_2 = false;
+            count_2 = 0;
+            out_line2.GetComponent<Image>().color = Color.black;
+            Save_pos_2 = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+
+            for (int i = 0; i < Post_count_2.Length; i++)
+            {
+                Post_count_2[i] = Save_pos_2;
+            }
+            for (int i = 0; i < CharacterSprite_2.Length; i++)
+            {
+                CharacterSprite_2[i].GetComponentInChildren<Animator>().enabled = false;
+                CharacterSprite_2[i].GetComponentInChildren<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
+            }
+            character_footholds[1].GetComponent<SpriteRenderer>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
+            character_footholds[1].GetComponent<SpriteRenderer>().material = default_matarial;
+        }
+        else if (Input.GetMouseButton(0)&&!is_touching_layer) //누르는동안
+        {
+            if (is_Left)
+            {
+                Moving_pos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+                is_click = true;
+
+                Post_count[count++] = Moving_pos;
+                if (count > Post_count.Length - 1)
+                    count = 0;
+
+                out_line1.GetComponent<Image>().color = Color.black;
+
+                Move_distance = Moving_pos.x - Save_pos.x;
+                Move_distance *= MoveSpeed;
+                for (int i = 0; i < CharacterSprite.Length; i++)
+                {
+                    pos.x = -X_Duplicate + Distance * Mathf.Cos(Move_distance + RotateSave[i]);
+                    pos.y = Distance * Mathf.Sin(Move_distance + RotateSave[i]);
+                    pos.y *= Y_Size;
+                    pos.z = pos.y;
+                    CharacterSprite[i].transform.position = pos;
+                    CharacterSprite[i].transform.localScale = 0.5f * Vector3.one * (4 - CharacterSprite[i].transform.position.y);
+
+                }
+            }
+            else if(is_Right)
+            {
+                Moving_pos_2 = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+                is_click = true;
+
+                Post_count_2[count_2++] = Moving_pos_2;
+                if (count_2 > Post_count_2.Length - 1)
+                    count_2 = 0;
+
+                out_line2.GetComponent<Image>().color = Color.black;
+
+                Move_distance_2 = Moving_pos_2.x - Save_pos_2.x;
+                Move_distance_2 *= MoveSpeed;
+                for (int i = 0; i < CharacterSprite_2.Length; i++)
+                {
+                    pos.x = X_Duplicate + Distance * Mathf.Cos(Move_distance_2 + RotateSave_2[i]);
+                    pos.y = Distance * Mathf.Sin(Move_distance_2 + RotateSave_2[i]);
+                    pos.y *= Y_Size;
+                    pos.z = pos.y;
+                    CharacterSprite_2[i].transform.position = pos;
+                    CharacterSprite_2[i].transform.localScale = 0.5f * Vector3.one * (4 - CharacterSprite_2[i].transform.position.y);
+
+                }
+            }
+        }
+        else if (Input.GetMouseButtonUp(0)) //마우스 때는순간
+        {
+            if(is_Left)
+            {
+                for (int i = 0; i < CharacterSprite.Length; i++)
+                {
+                    RotateSave[i] = RotateSave[i] + Move_distance;
+                }
+                Cur_pos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+
+                if (count == Post_count.Length - 1)
+                    count = -1;
+
+                power = Cur_pos.x - Post_count[count + 1].x; //힘
+                power *= 0.05f;
+                if (!is_touching_layer)
+                    is_Swape = true;
+                is_Left = false;
+                is_touching_layer = false;
+                is_click = false;
+            }
+            if (is_Right)
+            {
+                for (int i = 0; i < CharacterSprite_2.Length; i++)
+                {
+                    RotateSave_2[i] = RotateSave_2[i] + Move_distance_2;
+                }
+                Cur_pos_2 = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+
+                if (count_2 == Post_count_2.Length - 1)
+                    count_2 = -1;
+
+                power_2 = Cur_pos_2.x - Post_count_2[count_2 + 1].x; //힘
+                power_2 *= 0.05f;
+                if (!is_touching_layer)
+                    is_Swape_2 = true;                
+                is_Right = false;
+                is_touching_layer = false;
+                is_click = false;
+            }
+        }
+        if (is_Swape)
+        {
+            if (power < 0)
+                power += Time.deltaTime;
+            else
+                power -= Time.deltaTime;
+
+            if (Mathf.Abs(power) <= 0.1f)
+            {
+                is_Swape = false;
+                Is_Adjust = true;
+            }
+            for (int i = 0; i < CharacterSprite.Length; i++)
+            {
+                pos.x = -X_Duplicate + Distance * Mathf.Cos(power + RotateSave[i]);
+                pos.y = Distance * Mathf.Sin(power + RotateSave[i]);
+                pos.y *= Y_Size;
+                pos.z = pos.y;
+                CharacterSprite[i].transform.position = pos;
+                CharacterSprite[i].transform.localScale = 0.5f * Vector3.one * (4 - CharacterSprite[i].transform.position.y);
+            }
+            for (int i = 0; i < CharacterSprite.Length; i++)
+            {
+                RotateSave[i] = RotateSave[i] + power;              
+            }
+        }
+        if (is_Swape_2)
+        {
+            if (power_2 < 0)
+                power_2 += Time.deltaTime;
+            else
+                power_2 -= Time.deltaTime;
+
+            if (Mathf.Abs(power_2) <= 0.1f)
+            {
+                is_Swape_2 = false;
+                Is_Adjust_2 = true;
+            }
+            for (int i = 0; i < CharacterSprite_2.Length; i++)
+            {
+                pos.x = X_Duplicate + Distance * Mathf.Cos(power_2 + RotateSave_2[i]);
+                pos.y = Distance * Mathf.Sin(power_2 + RotateSave_2[i]);
+                pos.y *= Y_Size;
+                pos.z = pos.y;
+                CharacterSprite_2[i].transform.position = pos;
+                CharacterSprite_2[i].transform.localScale = 0.5f * Vector3.one * (4 - CharacterSprite_2[i].transform.position.y);
+            }
+            for (int i = 0; i < CharacterSprite_2.Length; i++)
+            {
+                RotateSave_2[i] = RotateSave_2[i] + power_2;
+                
+            }
+        }
+        if (Is_Adjust)
+        {
+            int below = 0;
+            float min_y = 99999;
+            float dir = 0.02f;
+            for (int i = 0; i < CharacterSprite.Length; i++) //가장 아래것 뽑음
+            {
+                if (CharacterSprite[i].transform.position.y < min_y)
+                {
+                    below = i;
+                    min_y = CharacterSprite[i].transform.position.y;
+                }
+            }
+
+            if (CharacterSprite[below].transform.position.x+X_Duplicate > 0) //오른쪽에 있으면 왼쪽으로 보내야함
+            {
+                dir =- 0.02f;
+            }
+            else //왼쪽에 있으니 오른쪽으로
+            {
+
+            }
+            for (int i = 0; i < CharacterSprite.Length; i++) //i 가 완전 아래로 가도록
+            {
+                pos.x = -X_Duplicate + Distance * Mathf.Cos(dir + RotateSave[i]);
+                pos.y = Distance * Mathf.Sin(dir + RotateSave[i]);
+                pos.y *= Y_Size;
+                pos.z = pos.y;
+                CharacterSprite[i].transform.position = pos;
+                CharacterSprite[i].transform.localScale = 0.5f * Vector3.one * (4 - CharacterSprite[i].transform.position.y);
+            }
+            for (int i = 0; i < CharacterSprite.Length; i++)
+            {
+                RotateSave[i] = RotateSave[i] + dir;
+            }
+
+
+            if (Mathf.Abs(CharacterSprite[below].transform.position.x + X_Duplicate) < 0.1f)
+            {
+                Is_Adjust = false;
+                CharacterSprite[below].GetComponentInChildren<Animator>().enabled = true;
+                CharacterSprite[below].GetComponentInChildren<Image>().color = Color.white;
+                _title.character_index[0] = below;
+                out_line1.GetComponent<Image>().color = Color.red;
+            }
+            character_footholds[0].GetComponent<SpriteRenderer>().color = Color.white;
+            character_footholds[0].GetComponent<SpriteRenderer>().material = shiny;
+        }
+        if (Is_Adjust_2)
+        {
+            int below = 0;
+            float min_y = 99999;
+            float dir = 0.02f;
+            for (int i = 0; i < CharacterSprite_2.Length; i++) //가장 아래것 뽑음
+            {
+                if (CharacterSprite_2[i].transform.position.y < min_y)
+                {
+                    below = i;
+                    min_y = CharacterSprite_2[i].transform.position.y;
+                }
+            }
+
+            if (CharacterSprite_2[below].transform.position.x-X_Duplicate > 0) //오른쪽에 있으면 왼쪽으로 보내야함
+            {
+                dir = -0.02f;
+            }
+            else //왼쪽에 있으니 오른쪽으로
+            {
+
+            }
+            for (int i = 0; i < CharacterSprite_2.Length; i++) //i 가 완전 아래로 가도록
+            {
+                pos.x = X_Duplicate + Distance * Mathf.Cos(dir + RotateSave_2[i]);
+                pos.y = Distance * Mathf.Sin(dir + RotateSave_2[i]);
+                pos.y *= Y_Size;
+                pos.z = pos.y;
+                CharacterSprite_2[i].transform.position = pos;
+                CharacterSprite_2[i].transform.localScale = 0.5f * Vector3.one * (4 - CharacterSprite_2[i].transform.position.y);
+            }
+            for (int i = 0; i < CharacterSprite_2.Length; i++)
+            {
+                RotateSave_2[i] = RotateSave_2[i] + dir;
+            }
+            if (Mathf.Abs(CharacterSprite_2[below].transform.position.x - X_Duplicate) < 0.1f)
+            {
+                Is_Adjust_2 = false;
+                CharacterSprite_2[below].GetComponentInChildren<Animator>().enabled = true;
+                CharacterSprite_2[below].GetComponentInChildren<Image>().color = Color.white;
+                _title.character_index[1] = below;
+                out_line2.GetComponent<Image>().color = Color.red;
+            }
+            character_footholds[1].GetComponent<SpriteRenderer>().color = Color.white;
+            character_footholds[1].GetComponent<SpriteRenderer>().material = shiny;
+        }
+
+        if (_title.character_index[0] != _title.character_index[1] && !is_click)
+        {
+            temp += Time.deltaTime * 5f;
+            moveposition = new Vector3(Mathf.Cos(temp) * 30f, 6f, next_icon.transform.position.z);
+            next_icon.transform.localPosition = moveposition;
+        }
+        else
+        {
+            next_icon.transform.localPosition = startposition;
+        }
+    }
+
+    private void SetDefault()
+    {
+        count = 0;
+        count_2 = 0;
+        is_Swape = false; Is_Adjust = true;
+        is_Swape_2 = false; Is_Adjust_2 = true;
+        is_Right = false; is_Left = false;
+        RotateSave = new float[CharacterSprite.Length];
+        RotateSave_2 = new float[CharacterSprite_2.Length];
+        Post_count = new Vector2[20];
+        Post_count_2 = new Vector2[20];
+        startposition = next_icon.transform.localPosition;
+
+        for (int i = 0; i < CharacterSprite.Length; i++)
+        {
+            pos.x = -X_Duplicate + Distance * Mathf.Cos(2 * (i - 2) * Mathf.PI / (CharacterSprite.Length));
+            pos.y = Distance * Mathf.Sin(2 * (i - 2) * Mathf.PI / (CharacterSprite.Length));
+            pos.y *= Y_Size;
+            pos.z = pos.y;
+            CharacterSprite[i].transform.position = pos;
+            CharacterSprite[i].transform.localScale = 0.5f * Vector3.one * (4 - CharacterSprite[i].transform.position.y);
+            RotateSave[i] = 2 * (i - 2) * Mathf.PI / (CharacterSprite.Length);
+        }
+        for (int i = 0; i < CharacterSprite_2.Length; i++)
+        {
+            pos.x = X_Duplicate + Distance * Mathf.Cos(2 * (i - 2) * Mathf.PI / (CharacterSprite_2.Length));
+            pos.y = Distance * Mathf.Sin(2 * i * Mathf.PI / (CharacterSprite_2.Length));
+            pos.y *= Y_Size;
+            pos.z = pos.y;
+            CharacterSprite_2[i].transform.position = pos;
+            CharacterSprite_2[i].transform.localScale = 0.5f * Vector3.one * (4 - CharacterSprite_2[i].transform.position.y);
+            RotateSave_2[i] = 2 * (i - 2) * Mathf.PI / (CharacterSprite_2.Length);
+        }
+
+        for (int i = 0;  i < CharacterSprite_2.Length; i++)
+        {
+            CharacterSprite_2[i].GetComponentInChildren<Animator>().enabled = false;
+            CharacterSprite[i].GetComponentInChildren<Animator>().enabled = false;
+            CharacterSprite[i].GetComponentInChildren<Animator>().GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
+            CharacterSprite_2[i].GetComponentInChildren<Animator>().GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
+        }
+    }
+
+    public void SetDeActive()
+    {
+        for (int i = 0; i < CharacterSprite_2.Length; i++)
+        {
+            CharacterSprite_2[i].gameObject.SetActive(false);
+            CharacterSprite[i].gameObject.SetActive(false);
+        }
+    }
+
+    public void SetActive()
+    {
+        is_touching_layer = false;
+        is_Left = false;
+        is_Right = false;
+        for (int i = 0; i < CharacterSprite_2.Length; i++)
+        {
+            CharacterSprite_2[i].gameObject.SetActive(true);
+            CharacterSprite[i].gameObject.SetActive(true);
+        }
+        SetDefault();
+    }
+}

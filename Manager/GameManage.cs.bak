@@ -1,0 +1,764 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+
+[System.Serializable]
+public class Slider_class
+{
+    public Slider[] sliders;
+}
+
+public class GameManage : MonoBehaviour
+{
+    static public GameManage instance;
+
+    private void Awake()
+    {
+        if (instance != null)
+        {
+            Destroy(this.gameObject);
+        }
+        else
+        {
+            //DontDestroyOnLoad(this.gameObject);
+            instance = this;
+        }
+    }  //--------------인스턴스화를 위함 ----
+
+
+    public GameObject boss;
+    private Camera _main;
+    private Animator _animator;
+    public GameObject selected_player;
+    public Vector2 JoysitckDir;
+    public GameObject[] player;
+
+    public int num_char = 2;  //케릭터 죽는 경우 이 스크립트에서 num_char 줄어들게 해야함
+
+    // 캐릭터 직업의 인덱스를 저장. ex) 0번에는 1번 캐릭터의 직업 인덱스가 저장됨
+    public int[] character_index;
+
+    // 보스의 인덱스를 저장.
+    private int boss_index;
+
+    public float[] Damage_toBoss;
+    public float[] Damage_fromBoss;
+    public float[] Heal;
+
+    //--------------결과창을 위한 변수들 ----
+    public Camera main_camera;
+    // fade효과를 위한 판넬
+    public GameObject fade_InOut;
+    // fade효과를 캔버스
+    public GameObject fade_canvas;
+    // 결과창 캔버스
+    public GameObject result_canvas;
+    // 결과창 판넬
+    public GameObject result_panel;
+    public Sprite defeat;
+    public Sprite victory;
+    public bool IsGameEnd;
+    public Sprite[] character_images;
+
+    public Image[] icon;
+
+
+    public Slider_class[] player_scroll;
+    public List<Slider[]> scrolls;
+
+    public GameObject[] result_character_panel;
+
+    private float big_damage = 1;
+    private float big_defence = 1;
+    private float big_heal = 1;
+
+    private List<Item> drop_item;
+    private List<Item> get_item_list = new List<Item>();
+
+    public GameObject grid;
+    public GameObject[] item_display;
+    private InventorySlot[] display_item;
+
+    public Image item_icon;
+    public Text item_name;
+    public Text item_description;
+    public Text item_count;
+
+    public GameObject win_title;
+    public GameObject lose_title;
+
+    public GameObject getItem_button;
+
+    public GameObject win_effect;
+    private GameObject win_effect_temp;
+
+    public GameObject lose_effect;
+    private GameObject lose_effect_temp;
+
+    private GameObject target_player;
+    private Vector2 dir;
+
+    // 난이도에 따른 아이템 확률 [난이도,장비타입]
+    private float[,] drop_chance = new float[4, 3];
+
+    public GameObject end_effect;
+
+    public GameObject[] Character_dummy;
+    public GameObject[] Character_other;
+    // Start is called before the first frame update
+    void Start()
+    {
+
+        if(NetworkManager.instance.is_multi)
+        {
+            if (NetworkManager.instance.My_character == null)
+                NetworkManager.instance.My_character = player[0];
+
+            Character_other = new GameObject[Character_dummy.Length];
+            // take a look in PlayerManager.cs script
+            //newPlayer = GameObject.Instantiate( local player avatar or model, spawn position, spawn rotation)
+            for (int i=0;i<NetworkManager.instance.Player_num;i++)
+            {
+                Debug.Log(NetworkManager.instance.my_index);
+                if (i == NetworkManager.instance.my_index)
+                {
+                    player[0].transform.position = NetworkManager.instance.spawnPoints[i].position;
+                    continue;
+                }
+                Character_other[i] = Instantiate(Character_dummy[i], NetworkManager.instance.spawnPoints[i].position,Quaternion.identity);
+
+                Character_other[i].GetComponent<CharacterStat>().char_num = NetworkManager.instance.char_index[i,0];
+                Debug.Log(NetworkManager.instance.char_index[i, 0]);
+                Debug.Log(NetworkManager.instance.char_index[i, 1]);
+                Character_other[i].GetComponent<CharacterStat>().ChangeSprite();
+            }
+            //케릭터 instantiate
+
+            NetworkManager.instance.gameIsRunning = true;
+
+        }
+        IsGameEnd = false;
+        player = GameObject.FindGameObjectsWithTag("Player");
+        boss_index = UpLoadData.boss_index;
+        character_index = UpLoadData.character_index;
+        StartCoroutine(StopObjects());
+        _animator = boss.GetComponent<Animator>();
+        _animator.SetFloat("DirX", 0f);
+        _animator.SetFloat("DirY", -1f);
+        result_canvas.SetActive(false);
+        Damage_fromBoss = new float[player.Length];
+        Damage_toBoss = new float[player.Length];
+        Heal = new float[player.Length];
+        big_damage = Damage_toBoss[0];
+        drop_item = DatabaseManager.instance.boss_drop_item[UpLoadData.boss_index * 4 + UpLoadData.boss_level];
+        display_item = grid.GetComponentsInChildren<InventorySlot>();
+        _main = Camera.main;
+        for (int i = 0; i < player.Length + 1; i++)
+        {
+            result_character_panel[i].SetActive(true);
+        }
+
+        // 드록 확률
+        drop_chance[0, 0] = 20f; drop_chance[0, 1] = 40f; drop_chance[0, 2] = 0;
+
+        DeActiveSlot();
+        InitializeDescription();
+    }
+
+    IEnumerator StopObjects()
+    {
+        yield return new WaitForSeconds(6f);
+
+        GameUI.instance.UI_ON();
+
+        for (int i = 0; i < player.Length; i++)
+        {
+            player[i].GetComponent<Character_Control>().enabled = true;
+            player[i].GetComponent<CharacterStat>().StopAllCoroutines();
+            player[i].GetComponent<CharacterStat>().enabled = true;
+        }
+
+        yield return new WaitForSeconds(1f);
+
+        switch (UpLoadData.boss_index)
+        {
+            case 0:
+                boss.GetComponent<DesertBossMove_koki>().enabled = true;
+                break;
+            case 1:
+                boss.GetComponent<Boss2Move>().enabled = true;
+                break;
+            case 2:
+                boss.GetComponent<Boss3Move>().enabled = true;
+                break;
+            case 3:
+                boss.GetComponent<Boss4Move>().enabled = true;
+                break;
+            case 4:
+                boss.GetComponent<Boss5Move>().enabled = true;
+                break;
+            case 5:
+                boss.GetComponent<Boss6Move>().enabled = true;
+                break;
+            case 6:
+                boss.GetComponent<Boss7Move>().enabled = true;
+                break;
+            case 7:
+                boss.GetComponent<Boss8Move>().enabled = true;
+                break;
+        }
+
+
+        yield return 0;
+    }
+
+    public void CharacterWinGame()
+    {
+        IsGameEnd = true;
+        GameUI.instance.UI_OFF();
+        int temp = UpLoadData.boss_index * 4 + UpLoadData.boss_level;
+        UpLoadData.boss_is_cleared[temp] = true;
+        _main.GetComponent<Camera_move>().VivrateForTime(0.5f);
+        StartCoroutine(VictoryResult());
+    }
+
+    public void BossWinGame()
+    {
+        IsGameEnd = true;
+        GameUI.instance.UI_OFF();
+        _main.GetComponent<Camera_move>().VivrateForTime(0.5f);
+        StartCoroutine(DefeatResult());
+    }
+
+    IEnumerator DefeatResult()
+    {
+        WaitForSecondsRealtime waittime = new WaitForSecondsRealtime(0.005f);
+        WaitForSecondsRealtime wait_second = new WaitForSecondsRealtime(1f);
+
+
+        result_canvas.SetActive(true);
+        end_effect.SetActive(true);
+        Time.timeScale = 0f;
+
+        _main.GetComponent<Camera_move>().enabled = false;
+        dir = (target_player.transform.position - _main.transform.position) / 3;
+        _main.transform.localRotation = Quaternion.Euler(0, 0, -60f);
+        int t = -1;
+        for (int i = 0; i < 3; i++)
+        {
+            _main.transform.position += (Vector3)dir;
+            _main.transform.localRotation = Quaternion.Euler(0, 0, _main.transform.localRotation.z * (t) - (20f * t));
+            _main.orthographicSize -= i * 2;
+            t *= -1;
+            yield return wait_second;
+        }
+        _main.transform.localRotation = Quaternion.Euler(0, 0, 0f);
+
+        Time.timeScale = 1f;
+
+        while (_main.orthographicSize <= 8)
+        {
+            _main.orthographicSize += Time.deltaTime * 2;
+            yield return waittime;
+        }
+
+        yield return new WaitForSeconds(0.5f);
+        end_effect.SetActive(false);
+
+        BGMManager.instance.FadeOutMusic();
+
+        Vector3 temp = main_camera.transform.position;
+
+        switch (UpLoadData.boss_index)
+        {
+            case 0:
+                boss.GetComponent<DesertBossMove_koki>().enabled = false;
+                boss.GetComponent<DesertBossMove_koki>().StopAllCoroutines();
+                break;
+            case 1:
+                boss.GetComponent<Boss2Move>().enabled = false;
+                boss.GetComponent<Boss2Move>().StopAllCoroutines();
+                break;
+            case 2:
+                boss.GetComponent<Boss3Move>().enabled = false;
+                boss.GetComponent<Boss3Move>().StopAllCoroutines();
+                break;
+            case 3:
+                boss.GetComponent<Boss4Move>().enabled = false;
+                boss.GetComponent<Boss4Move>().StopAllCoroutines();
+                break;
+            case 4:
+                boss.GetComponent<Boss5Move>().enabled = false;
+                boss.GetComponent<Boss5Move>().StopAllCoroutines();
+                break;
+            case 5:
+                boss.GetComponent<Boss6Move>().enabled = false;
+                boss.GetComponent<Boss6Move>().StopAllCoroutines();
+                break;
+            case 6:
+                boss.GetComponent<Boss7Move>().enabled = false;
+                boss.GetComponent<Boss7Move>().StopAllCoroutines();
+                break;
+            case 7:
+                boss.GetComponent<Boss8Move>().enabled = false;
+                boss.GetComponent<Boss8Move>().StopAllCoroutines();
+                break;
+        }
+        for (int i = 0; i < player.Length; i++)
+        {
+            player[i].GetComponent<Character_Control>().StopAllCoroutines();
+            player[i].GetComponent<Character_Control>().RunningStop();
+            player[i].GetComponent<Character_Control>().enabled = false;
+            player[i].GetComponent<CharacterStat>().StopAllCoroutines();
+            player[i].GetComponent<CharacterStat>().enabled = false;
+        }
+
+        yield return new WaitForSeconds(1f);
+
+        GameUI.instance.gameObject.SetActive(false);
+        Destroy(boss);
+        result_panel.SetActive(true);
+        lose_title.SetActive(true);
+        SoundManager.instance.Play(19);
+        BGMManager.instance.FadeInMusic();
+
+        temp.x += 3;
+        temp.y += 3;
+        lose_effect_temp = Instantiate(lose_effect, temp, Quaternion.Euler(0, 90, 0));
+        Destroy(win_effect_temp, 2f);
+        temp.x -= 6;
+        lose_effect_temp = Instantiate(lose_effect, temp, Quaternion.Euler(0, -90, 0));
+        Destroy(win_effect_temp, 2f);
+        BossWinDropItem(UpLoadData.boss_level);
+        StartCoroutine(HalfFadeOut());
+        StartCoroutine(HalfFadeIn());
+        for (int i = 0; i < player.Length; i++)
+        {
+            icon[i].sprite = character_images[player[i].GetComponent<CharacterStat>().char_num];
+        }
+        GetBig();
+        for (int i = 0; i < player.Length; i++)
+        {
+            player_scroll[i].sliders[0].value = (float)Damage_toBoss[i] / (float)big_damage;
+            player_scroll[i].sliders[1].value = (float)Damage_fromBoss[i] / (float)big_defence;
+            player_scroll[i].sliders[2].value = (float)Heal[i] / (float)big_heal;
+        }
+    }
+
+    IEnumerator VictoryResult()
+    {
+        WaitForSecondsRealtime waittime = new WaitForSecondsRealtime(0.005f);
+        WaitForSecondsRealtime wait_second = new WaitForSecondsRealtime(1f);
+
+
+        result_canvas.SetActive(true);
+        end_effect.SetActive(true);
+        Time.timeScale = 0f;
+
+        _main.GetComponent<Camera_move>().enabled = false;
+        dir = (BossStatus.instance.gameObject.transform.position - _main.transform.position) / 3;
+
+        for (int i = 0; i < 3; i++)
+        {
+            _main.transform.position += (Vector3)dir;
+            _main.orthographicSize -= i * 2;
+            yield return wait_second;
+        }
+        Time.timeScale = 1f;
+        for (int i = 0; i < player.Length; i++)
+        {
+            player[i].tag = "Abnormal";
+        }
+        while (_main.orthographicSize <= 8)
+        {
+            _main.orthographicSize += Time.deltaTime * 2;
+            yield return waittime;
+        }
+        yield return new WaitForSeconds(0.5f);
+        end_effect.SetActive(false);
+
+        BGMManager.instance.FadeOutMusic();
+
+        Vector3 temp = main_camera.transform.position;
+        switch (UpLoadData.boss_index)
+        {
+            case 0:
+                boss.GetComponent<DesertBossMove_koki>().enabled = false;
+                boss.GetComponent<DesertBossMove_koki>().StopAllCoroutines();
+                break;
+            case 1:
+                boss.GetComponent<Boss2Move>().enabled = false;
+                boss.GetComponent<Boss2Move>().StopAllCoroutines();
+                break;
+            case 2:
+                boss.GetComponent<Boss3Move>().enabled = false;
+                boss.GetComponent<Boss3Move>().StopAllCoroutines();
+                break;
+            case 3:
+                boss.GetComponent<Boss4Move>().enabled = false;
+                boss.GetComponent<Boss4Move>().StopAllCoroutines();
+                break;
+            case 4:
+                boss.GetComponent<Boss5Move>().enabled = false;
+                boss.GetComponent<Boss5Move>().StopAllCoroutines();
+                break;
+            case 5:
+                boss.GetComponent<Boss6Move>().enabled = false;
+                boss.GetComponent<Boss6Move>().StopAllCoroutines();
+                break;
+            case 6:
+                boss.GetComponent<Boss7Move>().enabled = false;
+                boss.GetComponent<Boss7Move>().StopAllCoroutines();
+                break;
+            case 7:
+                boss.GetComponent<Boss8Move>().enabled = false;
+                boss.GetComponent<Boss8Move>().StopAllCoroutines();
+                break;
+        }
+        for (int i = 0; i < player.Length; i++)
+        {
+            player[i].GetComponent<Character_Control>().StopAllCoroutines();
+            player[i].GetComponent<Character_Control>().RunningStop();
+            player[i].GetComponent<Character_Control>().enabled = false;
+            player[i].GetComponent<CharacterStat>().StopAllCoroutines();
+            player[i].GetComponent<CharacterStat>().enabled = false;
+        }
+        yield return new WaitForSeconds(1f);
+
+        GameUI.instance.gameObject.SetActive(false);
+        Destroy(boss);
+        fade_canvas.SetActive(true);
+        fade_canvas.GetComponent<Canvas>().worldCamera = main_camera;
+        fade_canvas.GetComponent<Canvas>().sortingLayerName = "Skill";
+        result_panel.SetActive(true);
+        win_title.SetActive(true);
+        SoundManager.instance.Play(17);
+        BGMManager.instance.FadeInMusic();
+        temp.x += 3;
+        temp.y += 3;
+        win_effect_temp = Instantiate(win_effect, temp, Quaternion.identity);
+        Destroy(win_effect_temp, 2f);
+        temp.x -= 6;
+        win_effect_temp = Instantiate(win_effect, temp, Quaternion.identity);
+        Destroy(win_effect_temp, 2f);
+
+        CharacterWinDropItem(UpLoadData.boss_level);
+        StartCoroutine(HalfFadeOut());
+        StartCoroutine(HalfFadeIn());
+        for (int i = 0; i < player.Length; i++)
+        {
+            icon[i].sprite = character_images[player[i].GetComponent<CharacterStat>().char_num];
+        }
+        GetBig();
+
+        for (int i = 0; i < player.Length; i++)
+        {
+            player_scroll[i].sliders[0].value = (float)Damage_toBoss[i] / (float)big_damage;
+            player_scroll[i].sliders[1].value = (float)Damage_fromBoss[i] / (float)big_defence;
+            player_scroll[i].sliders[2].value = (float)Damage_toBoss[i] / (float)big_heal;
+        }
+    }
+
+    IEnumerator HalfFadeOut()
+    {
+        Color color = fade_InOut.GetComponent<Image>().color;
+        while (color.a < 0.5f)
+        {
+            color.a += 3f * Time.deltaTime;
+            fade_InOut.GetComponent<Image>().color = color;
+            yield return new WaitForSeconds(0.01f);
+        }
+        yield return 0;
+    }
+
+    IEnumerator HalfFadeIn()
+    {
+        Color color = result_panel.GetComponent<Image>().color;
+        while (color.a < 0.5f)
+        {
+            color.a += 3f * Time.deltaTime;
+            result_panel.GetComponent<Image>().color = color;
+            yield return new WaitForSeconds(0.01f);
+        }
+        //result_title_image.enabled = true;
+        yield return 0;
+    }
+
+    private void GetBig()
+    {
+        for (int i = 0; i < player.Length; i++)
+        {
+            if (Damage_toBoss[i] > big_damage)
+            {
+                big_damage = Damage_toBoss[i];
+            }
+
+            if (Damage_fromBoss[i] > big_defence)
+            {
+                big_defence = Damage_fromBoss[i];
+            }
+
+            if (Heal[i] > big_heal)
+            {
+                big_heal = Heal[i];
+            }
+        }
+    }
+
+    public void GoToTitle()
+    {
+        InitializeDescription();
+
+        DatabaseManager.instance.SaveData();
+
+        Destroy(GameUI.instance.gameObject);
+
+        Destroy(GameManage.instance.gameObject);
+        SceneManager.LoadScene("TItle");
+    }
+
+    private void CharacterWinDropItem(int index)
+    {
+
+        for (int i = 0; i < drop_item.Count; i++)
+        {
+            if (drop_item[i].itemType == Item.ItemType.Use && get_item_list.Count < 8)
+            {
+                float use = Random.Range(1.0f, 100.0f);
+                if (use <= drop_item[i]._drop_chance)
+                {
+                    int count = Random.Range(1, 4);
+                    Item temp = get_item_list.Find(item => item.itemID == drop_item[i].itemID);
+                    if (temp != null)
+                    {
+                        temp.itemCount += count;
+                        continue;
+                    }
+                    else
+                    {
+                        drop_item[i].itemCount = count;
+                        get_item_list.Add(drop_item[i]);
+                        continue;
+                    }
+                }
+                else
+                    continue;
+            }
+            else if (drop_item[i].itemType == Item.ItemType.ETC && get_item_list.Count < 8)
+            {
+                float use = Random.Range(1.0f, 100.0f);
+                if (use <= drop_item[i]._drop_chance)
+                {
+                    int count = Random.Range(1, 4);
+                    Item temp = get_item_list.Find(item => item.itemID == drop_item[i].itemID);
+                    if (temp != null)
+                    {
+                        temp.itemCount += count;
+                        continue;
+                    }
+                    else
+                    {
+                        drop_item[i].itemCount = count;
+                        get_item_list.Add(drop_item[i]);
+                        continue;
+                    }
+                }
+                else
+                    continue;
+            }
+            else if(drop_item[i].itemType == Item.ItemType.Equip && get_item_list.Count < 8)
+            {
+                float use = Random.Range(1.0f, 100.0f);
+                if (use <= drop_item[i]._drop_chance)
+                {                   
+                    get_item_list.Add(drop_item[i]);
+                    continue;                   
+                }
+                else
+                    continue;
+            }
+
+        }
+
+        for (int i = 0; i < get_item_list.Count; i++)
+        {
+            item_display[i].SetActive(true);
+
+            display_item[i].AddItem(get_item_list[i]);
+        }
+
+        if (get_item_list.Count <= 0)
+        {
+            item_description.text = "획득할 아이템이 없습니다.";
+            getItem_button.SetActive(false);
+        }
+        else
+        {
+            getItem_button.SetActive(true);
+        }
+    }
+
+    private void BossWinDropItem(int index)
+    {
+        for (int i = 0; i < drop_item.Count; i++)
+        {
+            float use = Random.Range(1.0f, 100.0f);
+            if (drop_item[i].itemType == Item.ItemType.Use && get_item_list.Count < 8)
+            {
+                if (use <= drop_item[i]._drop_chance)
+                {
+                    int count = Random.Range(1, 4);
+                    Item temp = get_item_list.Find(item => item.itemID == drop_item[i].itemID);
+                    if (temp != null)
+                    {
+                        temp.itemCount += count;
+                        continue;
+                    }
+                    else
+                    {
+                        drop_item[i].itemCount = count;
+                        get_item_list.Add(drop_item[i]);
+                        continue;
+                    }
+                }
+                else
+                    continue;
+            }
+        }
+
+        for (int i = 0; i < get_item_list.Count; i++)
+        {
+            item_display[i].SetActive(true);
+
+            display_item[i].AddItem(get_item_list[i]);
+        }
+
+        if (get_item_list.Count <= 0)
+        {
+            item_description.text = "획득할 아이템이 없습니다.";
+            getItem_button.SetActive(false);
+        }
+        else
+        {
+            getItem_button.SetActive(true);
+        }
+    }
+
+
+    private void DeActiveSlot()
+    {
+        int count = DatabaseManager.instance.max_item_count - DatabaseManager.instance.itemList.Count;
+        if (count > 8)
+        {
+            count = 8;
+        }
+        for (int i = 0; i < count; i++)
+        {
+            item_display[i].SetActive(false);
+        }
+    }
+
+
+    // 수정 요망
+    public void GetItem()
+    {
+        for (int i = 0; i < get_item_list.Count; i++)
+        {
+            if (DatabaseManager.instance.itemList.Count == DatabaseManager.instance.max_item_count)
+            {
+                break;
+            }
+
+
+            if (get_item_list[i].itemType == Item.ItemType.Use)
+            {
+
+                if (DatabaseManager.instance.itemList.Find(item => item.itemID == get_item_list[i].itemID) == null)
+                {
+                    UpLoadData.item_is_gained[get_item_list[i].itemID - 19901] = true;
+                    Item temp = (Item)get_item_list[i].Clone();
+                    DatabaseManager.instance.itemList.Add(temp);
+                    DatabaseManager.instance.new_item_count++;
+                }
+                else
+                {
+                    DatabaseManager.instance.itemList.Find(item => item.itemID == get_item_list[i].itemID).itemCount += get_item_list[i].itemCount;
+                }
+            }
+            else if (get_item_list[i].itemType == Item.ItemType.Equip)
+            {
+                UpLoadData.item_is_gained[get_item_list[i].itemID - 10001] = true;
+                Item temp = (Item)get_item_list[i].Clone();
+                DatabaseManager.instance.itemList.Add(get_item_list[i]);
+                DatabaseManager.instance.new_item_count++;
+            }
+            else if (get_item_list[i].itemType == Item.ItemType.ETC)
+            {
+                if(DatabaseManager.instance.itemList.Find(item => item.itemID == get_item_list[i].itemID) == null)
+                {
+                    UpLoadData.item_is_gained[get_item_list[i].itemID - 29801] = true;
+                    Item temp = (Item)get_item_list[i].Clone();
+                    DatabaseManager.instance.itemList.Add(get_item_list[i]);
+                    DatabaseManager.instance.new_item_count++;
+                }
+                else
+                {
+                    DatabaseManager.instance.itemList.Find(item => item.itemID == get_item_list[i].itemID).itemCount += get_item_list[i].itemCount;
+                }
+            }
+
+        }
+        DeActiveSlot();
+        GetDescription();
+    }
+
+
+    public void DisplayItemOnDescription(int index)
+    {
+        Color a = item_icon.color;
+        a.a = 1;
+        item_icon.color = a;
+        item_icon.sprite = get_item_list[index].itemIcon;
+        item_name.text = get_item_list[index].itemName;
+        item_description.text = get_item_list[index].itemDescription;
+        item_count.text = "x" + get_item_list[index].itemCount.ToString();
+    }
+
+    private void InitializeDescription()
+    {
+        Color a = item_icon.color;
+        a.a = 0;
+        item_icon.color = a;
+        item_icon.sprite = null;
+        item_name.text = "";
+        item_description.text = "";
+        item_count.text = "";
+    }
+
+    private void GetDescription()
+    {
+        Color a = item_icon.color;
+        a.a = 0;
+        item_icon.color = a;
+        item_icon.sprite = null;
+        item_name.text = "";
+        if (DatabaseManager.instance.itemList.Count == DatabaseManager.instance.max_item_count)
+        {
+            item_description.text = "더 이상 아이템을 획득할 수 없습니다.";
+        }
+        else
+        {
+            item_description.text = "아이템을 모두\n획득하셨습니다.";
+        }
+        item_count.text = "";
+    }
+
+    public void GetTargetPlayer(GameObject player)
+    {
+        target_player = player;
+    }
+}
+
+
